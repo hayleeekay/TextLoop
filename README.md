@@ -83,13 +83,13 @@ Scheduler
 
 Planned packages:
 
-- `health` — application health endpoint
-- `reminder` — reminder model, repository, service, controller, and DTOs
-- `scheduler` — due-reminder background work
-- `sms` — provider-independent SMS interface and implementations
-- `reply` — inbound reply parsing and handling
-- `event` — reminder lifecycle history
-- `common` — genuinely shared configuration and error handling
+- `health`: application health endpoint
+- `reminder`: reminder model, repository, service, controller, and DTOs
+- `scheduler`: due-reminder background work
+- `sms`: provider-independent SMS interface and implementations
+- `reply`: inbound reply parsing and handling
+- `event`: reminder lifecycle history
+- `common`: genuinely shared configuration and error handling
 
 ## Tech Stack
 
