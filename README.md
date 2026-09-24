@@ -93,7 +93,7 @@ Planned packages:
 
 ## Tech Stack
 
-- Backend: Java 21 and Spring Boot
+- Backend: Java 25 and Spring Boot
 - Build tool: Maven
 - Database: PostgreSQL
 - Persistence: Spring Data JPA and Hibernate
