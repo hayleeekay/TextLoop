@@ -27,7 +27,7 @@ class ReminderControllerTest {
 
     @Test
     void createsReminder() throws Exception {
-        LocalDateTime scheduledAt = LocalDateTime.now().plusHours(1);
+        LocalDateTime scheduledAt = LocalDateTime.now().plusHours(1).withNano(0);
 
         String requestBody = """
                 {
