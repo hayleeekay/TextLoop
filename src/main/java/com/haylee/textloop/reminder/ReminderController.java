@@ -1,6 +1,9 @@
 package com.haylee.textloop.reminder;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,5 +29,10 @@ public class ReminderController {
     public ReminderResponse createReminder(
             @Valid @RequestBody CreateReminderRequest request) {
         return reminderService.createReminder(request);
+    }
+
+    @GetMapping
+    public List<ReminderResponse> getReminders() {
+        return reminderService.getReminders();
     }
 }

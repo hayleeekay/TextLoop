@@ -1,10 +1,12 @@
 package com.haylee.textloop.reminder;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -63,6 +65,41 @@ class ReminderControllerTest {
                 request.message().equals("Take a walk")
                         && request.scheduledAt().equals(scheduledAt)
                         && request.phoneNumber().equals("+12035550100")));
+    }
+
+    @Test
+    void getsReminders() throws Exception {
+        LocalDateTime scheduledAt = LocalDateTime.now().plusHours(1).withNano(0);
+        ReminderResponse serviceResponse = new ReminderResponse(
+                1L,
+                "Take a walk",
+                scheduledAt,
+                "+12035550100",
+                ReminderStatus.PENDING);
+
+        Mockito.when(reminderService.getReminders())
+                .thenReturn(List.of(serviceResponse));
+
+        mockMvc.perform(get("/api/reminders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].message").value("Take a walk"))
+                .andExpect(jsonPath("$[0].scheduledAt").value(scheduledAt.toString()))
+                .andExpect(jsonPath("$[0].phoneNumber").value("+12035550100"))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+
+        Mockito.verify(reminderService).getReminders();
+    }
+
+    @Test
+    void getsEmptyReminderList() throws Exception {
+        Mockito.when(reminderService.getReminders()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/reminders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        Mockito.verify(reminderService).getReminders();
     }
 
     @Test
