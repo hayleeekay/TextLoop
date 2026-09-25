@@ -1,5 +1,7 @@
 package com.haylee.textloop.reminder;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
@@ -21,11 +23,21 @@ public class ReminderService {
 
         Reminder savedReminder = reminderRepository.save(reminder);
 
+        return toResponse(savedReminder);
+    }
+
+    public List<ReminderResponse> getReminders() {
+        return reminderRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    private ReminderResponse toResponse(Reminder reminder) {
         return new ReminderResponse(
-                savedReminder.getId(),
-                savedReminder.getMessage(),
-                savedReminder.getScheduledAt(),
-                savedReminder.getPhoneNumber(),
-                savedReminder.getStatus());
+                reminder.getId(),
+                reminder.getMessage(),
+                reminder.getScheduledAt(),
+                reminder.getPhoneNumber(),
+                reminder.getStatus());
     }
 }
