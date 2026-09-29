@@ -11,15 +11,18 @@ import org.mockito.Mockito;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
+import com.haylee.textloop.sms.SmsService;
 
 class ReminderServiceTest {
     private ReminderRepository reminderRepository;
+    private SmsService smsService;
     private ReminderService reminderService;
 
     @BeforeEach
     void setUp() {
         reminderRepository = Mockito.mock(ReminderRepository.class);
-        reminderService = new ReminderService(reminderRepository);
+        smsService = Mockito.mock(SmsService.class);
+        reminderService = new ReminderService(reminderRepository, smsService);
     }
 
     @Test
@@ -74,5 +77,24 @@ class ReminderServiceTest {
                         ReminderStatus.PENDING)),
                 responses);
         Mockito.verify(reminderRepository).findAll();
+    }
+
+    @Test
+    void sendsDueReminderThroughSmsService() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 9, 29, 16, 0);
+        Reminder reminder = new Reminder(
+                "Take a walk",
+                "+12035550100",
+                cutoff.minusMinutes(1));
+        Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(
+                        ReminderStatus.PENDING, cutoff))
+                .thenReturn(List.of(reminder));
+
+        reminderService.processDueReminders(cutoff);
+
+        Mockito.verify(smsService).sendSms(
+                "+12035550100",
+                "TextLoop Reminder:\nTake a walk\n\nReply DONE, SNOOZE, or CANCEL.");
+        Assertions.assertEquals(ReminderStatus.PENDING, reminder.getStatus());
     }
 }
