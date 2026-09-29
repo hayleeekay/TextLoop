@@ -7,13 +7,16 @@ import org.springframework.stereotype.Service;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
+import com.haylee.textloop.sms.SmsService;
 
 @Service
 public class ReminderService {
     private final ReminderRepository reminderRepository;
+    private final SmsService smsService;
 
-    public ReminderService(ReminderRepository reminderRepository) {
+    public ReminderService(ReminderRepository reminderRepository, SmsService smsService) {
         this.reminderRepository = reminderRepository;
+        this.smsService = smsService;
     }
 
     public ReminderResponse createReminder(CreateReminderRequest request) {
@@ -37,6 +40,14 @@ public class ReminderService {
         return reminderRepository.findByStatusAndScheduledAtLessThanEqual(
                 ReminderStatus.PENDING,
                 cutoff);
+    }
+
+    public void processDueReminders(LocalDateTime cutoff) {
+        findDueReminders(cutoff).forEach(reminder -> {
+            String message = "TextLoop Reminder:\n" + reminder.getMessage()
+                    + "\n\nReply DONE, SNOOZE, or CANCEL.";
+            smsService.sendSms(reminder.getPhoneNumber(), message);
+        });
     }
 
     private ReminderResponse toResponse(Reminder reminder) {
