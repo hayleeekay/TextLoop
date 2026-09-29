@@ -7,11 +7,14 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.haylee.textloop.PostgreSQLTestConfiguration;
+import com.haylee.textloop.sms.SmsService;
 
 @SpringBootTest
 @Import(PostgreSQLTestConfiguration.class)
@@ -23,6 +26,9 @@ class ReminderDueSelectionIntegrationTest {
     @Autowired
     private ReminderService reminderService;
 
+    @MockitoBean
+    private SmsService smsService;
+
     @BeforeEach
     void clearReminders() {
         reminderRepository.deleteAll();
@@ -30,7 +36,7 @@ class ReminderDueSelectionIntegrationTest {
 
     @Test
     void findsOnlyPendingRemindersScheduledAtOrBeforeCutoff() {
-        LocalDateTime cutoff = LocalDateTime.of(2026, 9, 29, 12, 0);
+        LocalDateTime cutoff = LocalDateTime.now().plusDays(1).withNano(0);
 
         Reminder overdue = reminderRepository.save(new Reminder(
                 "Overdue reminder",
@@ -60,5 +66,26 @@ class ReminderDueSelectionIntegrationTest {
         assertThat(dueReminders)
                 .extracting(Reminder::getStatus)
                 .containsOnly(ReminderStatus.PENDING);
+    }
+
+    @Test
+    void persistsSentStatusAndDoesNotSendAgainOnLaterPass() {
+        LocalDateTime cutoff = LocalDateTime.now().plusDays(1).withNano(0);
+        Reminder reminder = reminderRepository.save(new Reminder(
+                "Take a walk",
+                "+12035550100",
+                cutoff.minusMinutes(1)));
+
+        reminderService.processDueReminders(cutoff);
+
+        Reminder savedReminder = reminderRepository.findById(reminder.getId()).orElseThrow();
+        assertThat(savedReminder.getStatus()).isEqualTo(ReminderStatus.SENT);
+
+        reminderService.processDueReminders(cutoff.plusMinutes(1));
+
+        Mockito.verify(smsService).sendSms(
+                "+12035550100",
+                "TextLoop Reminder:\nTake a walk\n\nReply DONE, SNOOZE, or CANCEL.");
+        Mockito.verifyNoMoreInteractions(smsService);
     }
 }

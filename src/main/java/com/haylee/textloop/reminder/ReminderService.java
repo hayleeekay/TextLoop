@@ -47,6 +47,8 @@ public class ReminderService {
             String message = "TextLoop Reminder:\n" + reminder.getMessage()
                     + "\n\nReply DONE, SNOOZE, or CANCEL.";
             smsService.sendSms(reminder.getPhoneNumber(), message);
+            reminder.setStatus(ReminderStatus.SENT);
+            reminderRepository.save(reminder);
         });
     }
 
