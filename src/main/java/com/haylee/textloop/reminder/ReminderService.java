@@ -1,5 +1,6 @@
 package com.haylee.textloop.reminder;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -30,6 +31,12 @@ public class ReminderService {
         return reminderRepository.findAll().stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    public List<Reminder> findDueReminders(LocalDateTime cutoff) {
+        return reminderRepository.findByStatusAndScheduledAtLessThanEqual(
+                ReminderStatus.PENDING,
+                cutoff);
     }
 
     private ReminderResponse toResponse(Reminder reminder) {
