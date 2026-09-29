@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
@@ -80,8 +81,8 @@ class ReminderServiceTest {
     }
 
     @Test
-    void sendsDueReminderThroughSmsService() {
-        LocalDateTime cutoff = LocalDateTime.of(2026, 9, 29, 16, 0);
+    void savesSentReminderAfterSmsSucceeds() {
+        LocalDateTime cutoff = LocalDateTime.now().plusDays(1);
         Reminder reminder = new Reminder(
                 "Take a walk",
                 "+12035550100",
@@ -89,12 +90,44 @@ class ReminderServiceTest {
         Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(
                         ReminderStatus.PENDING, cutoff))
                 .thenReturn(List.of(reminder));
+        String message = "TextLoop Reminder:\nTake a walk\n\nReply DONE, SNOOZE, or CANCEL.";
+        Mockito.doAnswer(invocation -> {
+            Assertions.assertEquals(ReminderStatus.PENDING, reminder.getStatus());
+            return null;
+        }).when(smsService).sendSms("+12035550100", message);
+        Mockito.when(reminderRepository.save(reminder)).thenAnswer(invocation -> {
+            Assertions.assertEquals(ReminderStatus.SENT, reminder.getStatus());
+            return reminder;
+        });
 
         reminderService.processDueReminders(cutoff);
 
-        Mockito.verify(smsService).sendSms(
+        InOrder inOrder = Mockito.inOrder(smsService, reminderRepository);
+        inOrder.verify(smsService).sendSms("+12035550100", message);
+        inOrder.verify(reminderRepository).save(reminder);
+        Assertions.assertEquals(ReminderStatus.SENT, reminder.getStatus());
+    }
+
+    @Test
+    void leavesReminderPendingAndUnsavedWhenSmsThrows() {
+        LocalDateTime cutoff = LocalDateTime.now().plusDays(1);
+        Reminder reminder = new Reminder(
+                "Take a walk",
                 "+12035550100",
-                "TextLoop Reminder:\nTake a walk\n\nReply DONE, SNOOZE, or CANCEL.");
+                cutoff.minusMinutes(1));
+        Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(
+                        ReminderStatus.PENDING, cutoff))
+                .thenReturn(List.of(reminder));
+        RuntimeException sendFailure = new RuntimeException("SMS send failed");
+        Mockito.doThrow(sendFailure).when(smsService)
+                .sendSms(Mockito.anyString(), Mockito.anyString());
+
+        RuntimeException thrown = Assertions.assertThrows(
+                RuntimeException.class,
+                () -> reminderService.processDueReminders(cutoff));
+
+        Assertions.assertSame(sendFailure, thrown);
         Assertions.assertEquals(ReminderStatus.PENDING, reminder.getStatus());
+        Mockito.verify(reminderRepository, Mockito.never()).save(Mockito.any(Reminder.class));
     }
 }
