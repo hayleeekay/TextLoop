@@ -6,9 +6,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -27,9 +30,10 @@ class ReminderControllerTest {
     @MockitoBean
     private ReminderService reminderService;
 
-    @Test
-    void createsReminder() throws Exception {
-        LocalDateTime scheduledAt = LocalDateTime.now().plusHours(1).withNano(0);
+    @ParameterizedTest
+    @ValueSource(ints = {0, 30})
+    void createsReminder(int second) throws Exception {
+        LocalDateTime scheduledAt = LocalDateTime.now().plusHours(1).withSecond(second).withNano(0);
 
         String requestBody = """
                 {
@@ -57,7 +61,7 @@ class ReminderControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.message").value("Take a walk"))
-                .andExpect(jsonPath("$.scheduledAt").value(scheduledAt.toString()))
+                .andExpect(jsonPath("$.scheduledAt").value(scheduledAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)))
                 .andExpect(jsonPath("$.phoneNumber").value("+12035550100"))
                 .andExpect(jsonPath("$.status").value("PENDING"));
 
@@ -67,9 +71,10 @@ class ReminderControllerTest {
                         && request.phoneNumber().equals("+12035550100")));
     }
 
-    @Test
-    void getsReminders() throws Exception {
-        LocalDateTime scheduledAt = LocalDateTime.now().plusHours(1).withNano(0);
+    @ParameterizedTest
+    @ValueSource(ints = {0, 30})
+    void getsReminders(int second) throws Exception {
+        LocalDateTime scheduledAt = LocalDateTime.now().plusHours(1).withSecond(second).withNano(0);
         ReminderResponse serviceResponse = new ReminderResponse(
                 1L,
                 "Take a walk",
@@ -84,7 +89,7 @@ class ReminderControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(1))
                 .andExpect(jsonPath("$[0].message").value("Take a walk"))
-                .andExpect(jsonPath("$[0].scheduledAt").value(scheduledAt.toString()))
+                .andExpect(jsonPath("$[0].scheduledAt").value(scheduledAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)))
                 .andExpect(jsonPath("$[0].phoneNumber").value("+12035550100"))
                 .andExpect(jsonPath("$[0].status").value("PENDING"));
 
