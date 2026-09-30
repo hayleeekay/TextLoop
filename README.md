@@ -19,25 +19,23 @@ text than a traditional notification.
 
 ## Status
 
-TextLoop is in early development and is not a usable reminder app yet. The current
-code is the beginning of the backend foundation, not a release intended for people to
-install or rely on.
+TextLoop is still in early development and is not ready to use yet. The backend can
+now complete its first one-way reminder flow with simulated SMS, but it is still
+development code rather than a release.
 
 Currently implemented:
 
-- Spring Boot application with `GET /health`
-- PostgreSQL connection and basic database configuration
-- JPA/Hibernate `Reminder` entity and `reminders` table
-- `PENDING` and `SENT` reminder statuses
-- Spring Data `ReminderRepository`
-- Application startup smoke test
+- Create and retrieve reminders through the API
+- Store reminders in PostgreSQL as `PENDING` or `SENT`
+- Detect when pending reminders are due
+- Produce a simulated SMS and mark successful sends as `SENT`
+- Run automated tests in GitHub Actions
 
 Next development steps:
 
-- Create reminders through `POST /api/reminders`
-- Retrieve reminders through `GET /api/reminders`
-- Detect when reminders are due
-- Simulate sending reminders before connecting a real SMS provider
+- Simulate incoming SMS replies
+- Parse and match `DONE`, `CANCEL`, and `SNOOZE`
+- Update reminder state and history
 
 ## Version 1 Goal
 
@@ -58,9 +56,9 @@ create reminder in a web app
 During development, SMS will be simulated so the reminder engine can be built and
 tested before adding provider cost, setup, or production messaging requirements.
 
-## Planned Architecture
+## Architecture
 
-The backend is being built as a feature-oriented Spring Boot application:
+The backend uses a feature-oriented Spring Boot structure:
 
 ```text
 HTTP request
@@ -71,25 +69,19 @@ HTTP request
     -> PostgreSQL
 ```
 
-Reminder delivery is planned to follow:
+Reminder delivery currently follows:
 
 ```text
 Scheduler
     -> Reminder service
+    -> find due PENDING reminders
     -> SmsService interface
-    -> simulated SMS during development
-    -> real provider implementation later
+    -> FakeSmsService
+    -> save reminder as SENT
 ```
 
-Planned packages:
-
-- `health`: application health endpoint
-- `reminder`: reminder model, repository, service, controller, and DTOs
-- `scheduler`: due-reminder background work
-- `sms`: provider-independent SMS interface and implementations
-- `reply`: inbound reply parsing and handling
-- `event`: reminder lifecycle history
-- `common`: genuinely shared configuration and error handling
+A real SMS implementation can later replace the fake sender without tying reminder
+logic to a specific provider.
 
 ## Tech Stack
 
@@ -99,20 +91,24 @@ Planned packages:
 - Persistence: Spring Data JPA and Hibernate
 - Frontend: a minimal web UI later
 - SMS: simulated during development, then a real provider after the backend loop works
-- Workflow: GitHub Issues, branches, pull requests, and automated checks as the project grows
+- Workflow: GitHub Issues, pull requests, and Java 25 tests in GitHub Actions
 
 ## Development Direction
 
-The current backend milestone is intended to prove the complete reminder loop with
-simulated SMS and replies. It is a development milestone, not a user release.
+The first one-way backend milestone is complete: reminders can be created, stored,
+detected when due, fake-sent, and marked as `SENT`.
+
+The next phase is simulated inbound reply handling. Reply behavior will be built and
+tested locally before connecting a real SMS provider. TextLoop remains a development
+project rather than a user release.
 
 Later work will include:
 
+- Reminder reply handling and lifecycle history
 - A minimal interface
 - A real SMS provider
 - Timezone-aware scheduling
 - Versioned database migrations
-- More complete automated testing
 - Deployment and operational safeguards
 - Privacy, security, cost, consent, and messaging-requirement reviews before public use
 
