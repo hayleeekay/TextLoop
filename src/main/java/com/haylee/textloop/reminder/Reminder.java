@@ -21,10 +21,10 @@ public class Reminder {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = ReminderLimits.MESSAGE_MAX_LENGTH)
     private String message;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = ReminderLimits.PHONE_NUMBER_MAX_LENGTH)
     private String phoneNumber;
 
     @Column(nullable = false)

@@ -1,8 +1,11 @@
 package com.haylee.textloop.reminder;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
 @RestController
@@ -34,5 +38,11 @@ public class ReminderController {
     @GetMapping
     public List<ReminderResponse> getReminders() {
         return reminderService.getReminders();
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public void invalidReminder(HttpServletResponse response) throws IOException {
+        // Keep the default error response without logging rejected field values.
+        response.sendError(HttpStatus.BAD_REQUEST.value());
     }
 }

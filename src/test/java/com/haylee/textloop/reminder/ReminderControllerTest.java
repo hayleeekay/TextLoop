@@ -1,5 +1,6 @@
 package com.haylee.textloop.reminder;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -8,9 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -157,6 +160,43 @@ class ReminderControllerTest {
                 """;
 
         assertBadRequest(requestBody);
+    }
+
+    @ParameterizedTest
+    @MethodSource("missingOrNullStrings")
+    void rejectsMissingOrNullStrings(String fields) throws Exception {
+        assertBadRequest("{\"scheduledAt\":\"%s\",%s}"
+                .formatted(LocalDateTime.now().plusDays(1), fields));
+    }
+
+    private static Stream<String> missingOrNullStrings() {
+        return Stream.of(
+                "\"phoneNumber\":\"+12035550100\"",
+                "\"phoneNumber\":\"+12035550100\",\"message\":null",
+                "\"message\":\"Take a walk\"",
+                "\"message\":\"Take a walk\",\"phoneNumber\":null");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"message", "phoneNumber"})
+    void rejectsOversizedInputBeforeCallingService(String field) throws Exception {
+        String message = field.equals("message") ? "m".repeat(1001) : "Take a walk";
+        String phoneNumber = field.equals("phoneNumber") ? "p".repeat(256) : "+12035550100";
+        assertBadRequest("{\"message\":\"%s\",\"phoneNumber\":\"%s\",\"scheduledAt\":\"%s\"}"
+                .formatted(message, phoneNumber, LocalDateTime.now().plusDays(1)));
+    }
+
+    @Test
+    void doesNotHandleUnrelatedServiceFailures() {
+        RuntimeException failure = new IllegalStateException("Creation failed");
+        Mockito.when(reminderService.createReminder(Mockito.any(CreateReminderRequest.class)))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() -> mockMvc.perform(post("/api/reminders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Take a walk\",\"phoneNumber\":\"+12035550100\",\"scheduledAt\":\"%s\"}"
+                                .formatted(LocalDateTime.now().plusDays(1)))))
+                .hasCause(failure);
     }
 
     private void assertBadRequest(String requestBody) throws Exception {
