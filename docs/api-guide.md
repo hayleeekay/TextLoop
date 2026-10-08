@@ -75,7 +75,8 @@ The response includes the submitted fields plus:
 | `status` | string | Current reminder state: `PENDING` or `SENT`. New reminders start as `PENDING`. |
 
 **Storage:** Reminders are persisted in PostgreSQL's `reminders` table. The response
-contains selected fields rather than the complete database row.
+contains selected fields rather than the complete database row. Delivery tracking
+is stored separately in `deliveries` and is not exposed in the HTTP response.
 
 ### Errors
 
@@ -93,35 +94,63 @@ values. Use the request-field table to check the input.
 
 ## What happens next
 
-The scheduler is configured to run at a 60-second interval. Each pass selects
-`PENDING` reminders whose scheduled time has arrived or passed.
+The normal application's scheduler runs at a 60-second interval by default. It
+checks due `PENDING` reminders, but the reminder status alone does not authorize a
+send. A separate delivery record determines whether submission is permitted.
 
-For each selected reminder, TextLoop:
+Creating a reminder also saves its current delivery intent: a delivery ID and a
+snapshot of the phone number and full rendered message. Retries use that same ID
+and snapshot.
 
-1. Builds the reminder message.
-2. Calls the configured SMS sender.
-3. After the sender returns successfully, saves the reminder as `SENT`.
+For an eligible delivery, TextLoop:
 
-The current fake sender logs the phone number and rendered message. It does not
-send a real SMS, so use fictional data when trying the flow.
+1. Commits `UNKNOWN` before calling the sender, recording that the attempt's outcome
+   is unresolved.
+2. Calls the configured SMS sender with the saved delivery ID and snapshot.
+3. Commits the sender's outcome. Acceptance is recorded as `ACCEPTED` separately
+   from the reminder update.
+4. Finalizes recorded acceptance by saving the reminder as `SENT`.
+
+The current fake sender simulates acceptance and logs the delivery ID, without
+logging the phone number or rendered message. It does not send a real SMS.
 
 | Status | Meaning |
 | --- | --- |
-| `PENDING` | The reminder has not been recorded as successfully sent. It becomes eligible for processing when due. |
-| `SENT` | The sender returned successfully and the resulting status was saved. This does not confirm delivery to a phone. |
+| `PENDING` | The reminder's current sender acceptance has not been finalized. Its delivery may be waiting, held, or accepted but awaiting finalization. |
+| `SENT` | The reminder's current sender acceptance has been finalized. This does not confirm delivery to a phone. |
 
 The scheduled time determines eligibility for processing, rather than an exact
-sending time. Later passes skip reminders already persisted as `SENT`.
+sending time. Delivery outcomes such as `UNKNOWN` and `ACCEPTED` are internal
+tracking states, not values of the API's `status` field.
+
+### Retries and recovery
+
+Automatic retries apply only to known retryable non-acceptance. Each delivery has
+three total automatic attempts, including the first submission. After the first
+retryable rejection, TextLoop waits at least one minute; after the second, it waits
+at least five minutes. The attempt count and retry timing survive restart. Actual
+retry processing happens on a subsequent scheduler pass.
+
+Unresolved attempts, permanent rejections, and exhausted retries are held for
+recovery. They are not automatically resubmitted. A `PENDING` status therefore does
+not prove that no submission occurred or that another attempt is permitted.
+
+If acceptance was committed but saving `SENT` failed, a later scheduler pass
+finalizes the recorded acceptance without another submission. If the sender's
+outcome was not committed, the delivery remains `UNKNOWN` for recovery.
+
+For inspection and recovery commands, see [Local delivery recovery](delivery-recovery.md).
+Recovery supports the local single-instance workflow and must run with the normal
+application stopped; it disables HTTP and scheduled processing.
 
 ### Current limitations
 
-- A sending or saving exception stops the remaining reminders in that pass.
-- If the sender throws, the service does not save `SENT`. The reminder remains
-  eligible for a later pass.
-- If sending succeeds but saving `SENT` fails, a later pass may send the reminder
-  again.
+Known rejections do not block other eligible reminders. Unexpected sender or
+database exceptions can still stop the current processing pass.
 
-A `PENDING` status therefore does not prove that no sending attempt occurred.
+Real SMS is not implemented. The recovery safeguards do not guarantee exactly-once
+external SMS submission; provider-specific behavior and protections still need
+verification before connecting a real sender.
 
 ## Retrieve reminders
 
@@ -158,7 +187,8 @@ The endpoint returns reminders across all phone numbers, without owner filtering
 pagination, or guaranteed ordering.
 
 To observe background processing, retrieve the list again after a reminder becomes
-due. Its status changes to `SENT` after successful sending and persistence.
+due. Its status changes to `SENT` after sender acceptance is recorded and finalized.
+For reminders that remain `PENDING`, see [Retries and recovery](#retries-and-recovery).
 
 ## Simulate an inbound reply
 
