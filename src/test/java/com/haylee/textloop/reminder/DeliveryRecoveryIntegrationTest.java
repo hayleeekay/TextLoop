@@ -8,8 +8,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-import java.sql.DriverManager;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,34 +23,39 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.ExitCodeEvent;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.web.context.WebServerApplicationContext;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+import com.haylee.textloop.LoggingStateExtension;
 import com.haylee.textloop.TextloopApplication;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.scheduler.ReminderScheduler;
 import com.haylee.textloop.sms.SmsService;
 import com.haylee.textloop.sms.SmsSubmissionResult;
 
-@ExtendWith(OutputCaptureExtension.class)
+@ExtendWith({LoggingStateExtension.class, OutputCaptureExtension.class})
 class DeliveryRecoveryIntegrationTest {
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
     @BeforeAll
@@ -61,6 +67,9 @@ class DeliveryRecoveryIntegrationTest {
     private static SmsService sender;
     private static MutableClock clock;
     private ConfigurableApplicationContext context;
+    private static DeliveryTransactions failedTransactions;
+    private boolean failContextStartup;
+    private final List<Integer> startupExitCodes = new ArrayList<>();
 
     @BeforeEach
     void startFreshDatabase() throws Exception {
@@ -69,6 +78,8 @@ class DeliveryRecoveryIntegrationTest {
             statement.execute("drop schema public cascade");
             statement.execute("create schema public");
         }
+        failedTransactions = null;
+        failContextStartup = false;
         sender = mock(SmsService.class);
         clock = new MutableClock();
         when(sender.sendSms(any(), anyString(), anyString())).thenAnswer(invocation -> {
@@ -88,6 +99,7 @@ class DeliveryRecoveryIntegrationTest {
     private void boot(String... overrides) {
         if (context != null) {
             context.close();
+            context = null;
         }
         var properties = new LinkedHashMap<String, String>();
         properties.put("spring.datasource.url", postgres.getJdbcUrl());
@@ -107,6 +119,13 @@ class DeliveryRecoveryIntegrationTest {
         var application = TextloopApplication.application();
         application.setLogStartupInfo(false);
         application.addPrimarySources(List.of(Fixtures.class));
+        if (failedTransactions != null) {
+            application.addPrimarySources(List.of(FailedTransactionsConfiguration.class));
+        }
+        if (failContextStartup) {
+            application.addPrimarySources(List.of(FailedContextConfiguration.class));
+        }
+        application.addListeners((ApplicationListener<ExitCodeEvent>) event -> startupExitCodes.add(event.getExitCode()));
         context = application.run(properties.entrySet().stream()
                 .map(entry -> "--" + entry.getKey() + "=" + entry.getValue()).toArray(String[]::new));
     }
@@ -545,6 +564,160 @@ class DeliveryRecoveryIntegrationTest {
         assertThat(output).doesNotContain("private-database-marker", "private-database-payload", "+12035550100");
         assertThat(reload(delivery.getId()).getState()).isEqualTo(DeliveryState.UNKNOWN);
         verify(sender, times(1)).sendSms(eq(delivery.getId()), anyString(), anyString());
+    }
+
+    @Test
+    void recoveryAcceptanceCommitFailureIsReportedSafelyAndPreservesUnknown(CapturedOutput output) {
+        Delivery delivery = create("private-recovery-commit-payload");
+        transactions().claim(delivery.getId(), now());
+        long version = reload(delivery.getId()).getVersion();
+        failCommitWithPayload("NEW.state = 'ACCEPTED'");
+
+        assertThatThrownBy(() -> boot("textloop.recovery=true", "recovery.action=confirm-accepted",
+                "recovery.delivery=" + delivery.getId(), "recovery.version=" + version, "recovery.app-stopped=true"))
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(startupExitCodes).containsExactly(1);
+        assertUnknownUnchanged(delivery.getId(), version);
+        assertThat(output).contains("Recovery startup or execution failed. Inspect delivery state before retrying.")
+                .doesNotContain("private-recovery-commit-payload", "private-recovery-database-marker", "+12035550100",
+                        "PSQLException", "Caused by:", "Recovery refused");
+        verifyNoInteractions(sender);
+    }
+
+    @Test
+    void recoveryAdoptionCommitFailureIsReportedSafelyBeforeTheCommandRuns(CapturedOutput output) {
+        Delivery existing = create("Existing unknown");
+        transactions().claim(existing.getId(), now());
+        long version = reload(existing.getId()).getVersion();
+        Reminder legacy = reminderRows().save(new Reminder("private-adoption-payload", "+12035550100", now().minusMinutes(1)));
+        failCommitWithPayload("NEW.state = 'UNKNOWN'");
+
+        assertThatThrownBy(() -> boot("textloop.recovery=true")).isInstanceOf(RuntimeException.class);
+
+        assertThat(startupExitCodes).containsExactly(1);
+        assertUnknownUnchanged(existing.getId(), version);
+        assertThat(independentJdbc().queryForObject("select count(*) from deliveries", Long.class)).isEqualTo(1L);
+        assertThat(independentJdbc().queryForObject("select current_delivery_id from reminders where id = ?", UUID.class, legacy.getId())).isNull();
+        assertThat(output).contains("Recovery startup or execution failed. Inspect delivery state before retrying.")
+                .doesNotContain("private-adoption-payload", "private-recovery-database-marker", "+12035550100", "Caused by:", "Delivery inspection");
+        verifyNoInteractions(sender);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"adoption", "listing", "execution"})
+    void recoveryProgrammingFailuresKeepNestedCausesOutOfStartupOutput(String phase, CapturedOutput output) {
+        Delivery delivery = create("Unknown stays durable");
+        transactions().claim(delivery.getId(), now());
+        long version = reload(delivery.getId()).getVersion();
+        failedTransactions = mock(DeliveryTransactions.class);
+        RuntimeException failure = new IllegalStateException("private-programming-payload +12035550100",
+                new IllegalArgumentException("private-nested-cause-marker"));
+        switch (phase) {
+            case "adoption" -> doThrow(failure).when(failedTransactions).initializeLegacy();
+            case "listing" -> when(failedTransactions.inspect()).thenThrow(failure);
+            case "execution" -> when(failedTransactions.recover(any(), anyLong(), any(), anyBoolean())).thenThrow(failure);
+            default -> throw new IllegalArgumentException();
+        }
+
+        assertThatThrownBy(() -> boot("textloop.recovery=true", "recovery.action=" + (phase.equals("execution") ? "confirm-accepted" : "list"),
+                "recovery.delivery=" + delivery.getId(), "recovery.version=" + version, "recovery.app-stopped=true"))
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(startupExitCodes).containsExactly(1);
+        assertUnknownUnchanged(delivery.getId(), version);
+        assertThat(output).contains("Recovery startup or execution failed. Inspect delivery state before retrying.")
+                .doesNotContain("private-programming-payload", "private-nested-cause-marker", "+12035550100", "Caused by:", "Recovery refused");
+        verifyNoInteractions(sender);
+    }
+
+    @Test
+    void recoveryContextInitializationFailureIsReportedSafely(CapturedOutput output) {
+        failContextStartup = true;
+        assertThatThrownBy(() -> boot("textloop.recovery=true")).isInstanceOf(RuntimeException.class);
+        assertThat(output).contains("Recovery startup or execution failed. Inspect delivery state before retrying.")
+                .doesNotContain("private-startup-payload", "private-startup-nested-cause", "+12035550100", "Caused by:");
+        verifyNoInteractions(sender);
+    }
+
+    @Test
+    void realRecoveryEntryPointExitsNonzeroWithoutPrintingFailedCommitDetails() throws Exception {
+        Delivery delivery = create("private-process-payload");
+        transactions().claim(delivery.getId(), now());
+        long version = reload(delivery.getId()).getVersion();
+        failCommitWithPayload("NEW.state = 'ACCEPTED'");
+        context.close();
+        context = null;
+        var result = runRecoveryProcess("--recovery.action=confirm-accepted", "--recovery.delivery=" + delivery.getId(),
+                "--recovery.version=" + version, "--recovery.app-stopped=true");
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.output()).contains("Recovery startup or execution failed. Inspect delivery state before retrying.")
+                .doesNotContain("private-process-payload", "private-recovery-database-marker", "+12035550100", "Caused by:", "[FAKE SMS]");
+        assertUnknownUnchanged(delivery.getId(), version);
+        verifyNoInteractions(sender);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"driver", "binding"})
+    void realRecoveryStartupFailureBeforeRunnersExitsNonzeroWithoutPayload(String phase) throws Exception {
+        Delivery delivery = create("Unknown before startup failure");
+        transactions().claim(delivery.getId(), now());
+        long version = reload(delivery.getId()).getVersion();
+        context.close();
+        context = null;
+        String property = phase.equals("driver") ? "spring.datasource.driver-class-name" : "spring.main.banner-mode";
+        var result = runRecoveryProcess("--" + property + "=private-startup-payload.+12035550100");
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output()).contains("Recovery startup or execution failed. Inspect delivery state before retrying.")
+                .doesNotContain("private-startup-payload", "+12035550100", "Caused by:", "[FAKE SMS]");
+        assertUnknownUnchanged(delivery.getId(), version);
+        verifyNoInteractions(sender);
+    }
+
+    private ProcessResult runRecoveryProcess(String... options) throws Exception {
+        List<String> command = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-cp", System.getProperty("java.class.path"), TextloopApplication.class.getName(),
+                "--spring.datasource.url=" + postgres.getJdbcUrl(), "--spring.datasource.username=" + postgres.getUsername(),
+                "--spring.datasource.password=" + postgres.getPassword(), "--spring.jpa.hibernate.ddl-auto=update",
+                "--spring.jpa.show-sql=false", "--spring.main.banner-mode=off", "--textloop.recovery=true"));
+        command.addAll(List.of(options));
+        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        try {
+            assertThat(process.waitFor(30, TimeUnit.SECONDS)).isTrue();
+            return new ProcessResult(process.exitValue(), new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+        } finally {
+            process.destroyForcibly();
+        }
+    }
+
+    private record ProcessResult(int exitCode, String output) {}
+
+    private JdbcTemplate independentJdbc() {
+        return new JdbcTemplate(new DriverManagerDataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword()));
+    }
+
+    private void assertUnknownUnchanged(UUID id, long version) {
+        assertThat(independentJdbc().queryForObject("select state from deliveries where id = ?", String.class, id)).isEqualTo("UNKNOWN");
+        assertThat(independentJdbc().queryForObject("select version from deliveries where id = ?", Long.class, id)).isEqualTo(version);
+    }
+
+    private void failCommitWithPayload(String condition) {
+        jdbc().execute("create function fail_commit() returns trigger language plpgsql as $$ begin if " + condition
+                + " then raise exception 'private-recovery-database-marker % %', NEW.message, NEW.phone_number; end if; return new; end $$");
+        jdbc().execute("create constraint trigger failure_at_commit after insert or update on deliveries "
+                + "deferrable initially deferred for each row execute function fail_commit()");
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FailedTransactionsConfiguration {
+        @Bean @Primary DeliveryTransactions failedRecoveryTransactions() { return failedTransactions; }
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FailedContextConfiguration {
+        @Bean Object failedStartupBean() {
+            throw new IllegalStateException("private-startup-payload +12035550100", new RuntimeException("private-startup-nested-cause"));
+        }
     }
 
     private void failCommit(String table, String condition) {

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.ExitCodeGenerator;
+import org.springframework.boot.ExitCodeExceptionMapper;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 @Order(1)
 @ConditionalOnProperty(name = "textloop.recovery", havingValue = "true")
-public class DeliveryRecoveryCommand implements ApplicationRunner, ExitCodeGenerator {
+public class DeliveryRecoveryCommand implements ApplicationRunner, ExitCodeGenerator, ExitCodeExceptionMapper {
     private static final Logger logger = LoggerFactory.getLogger(DeliveryRecoveryCommand.class);
     private final DeliveryTransactions transactions;
     private int exitCode;
@@ -79,6 +80,11 @@ public class DeliveryRecoveryCommand implements ApplicationRunner, ExitCodeGener
     @Override
     public int getExitCode() {
         return exitCode;
+    }
+
+    @Override
+    public int getExitCode(Throwable failure) {
+        return RecoveryFailureException.EXIT_CODE;
     }
 
     private record Command(UUID id, long version, RecoveryAction action, boolean acknowledgeRisk) {}

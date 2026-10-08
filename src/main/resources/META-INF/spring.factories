@@ -1,0 +1,2 @@
+org.springframework.boot.SpringBootExceptionReporter=\
+com.haylee.textloop.reminder.RecoveryFailureReporter

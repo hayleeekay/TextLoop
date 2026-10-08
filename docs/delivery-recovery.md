@@ -51,6 +51,8 @@ Recovery commits the permission; normal processing consumes it once. Another rej
 returns to the hold. Restart the normal application when recovery is complete. The
 same old command token cannot grant a new permission after the first was consumed.
 List again before each new recovery decision. Refused commands exit with code 2.
+Startup or execution failures exit nonzero and emit a fixed diagnostic without exception
+text. These failures do not authorize retrying a submission or change an unknown outcome.
 
 Other actions use the same delivery, version, and stopped-application options:
 

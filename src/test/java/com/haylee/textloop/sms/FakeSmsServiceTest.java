@@ -3,13 +3,24 @@ package com.haylee.textloop.sms;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.logging.LogLevel;
+import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
-@ExtendWith(OutputCaptureExtension.class)
+import com.haylee.textloop.LoggingStateExtension;
+
+@ExtendWith({LoggingStateExtension.class, OutputCaptureExtension.class})
 class FakeSmsServiceTest {
+    @BeforeEach
+    void enableSenderOutput() {
+        LoggingSystem.get(getClass().getClassLoader()).setLogLevel(FakeSmsService.class.getName(), LogLevel.INFO);
+    }
+
     @Test
     void reportsSimulatedAcceptanceWithoutPayload(CapturedOutput output) {
         UUID id = UUID.randomUUID();
