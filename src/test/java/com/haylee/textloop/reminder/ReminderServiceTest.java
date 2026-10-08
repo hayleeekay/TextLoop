@@ -6,24 +6,30 @@ import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
 import com.haylee.textloop.sms.SmsService;
+import com.haylee.textloop.sms.SmsSubmissionResult;
+import java.util.UUID;
+import java.util.Optional;
 
 class ReminderServiceTest {
     private ReminderRepository reminderRepository;
     private SmsService smsService;
     private ReminderService reminderService;
+    private DeliveryTransactions deliveries;
+    private DeliveryRepository deliveryRepository;
 
     @BeforeEach
     void setUp() {
         reminderRepository = Mockito.mock(ReminderRepository.class);
         smsService = Mockito.mock(SmsService.class);
-        reminderService = new ReminderService(reminderRepository, smsService);
+        deliveries = Mockito.mock(DeliveryTransactions.class);
+        deliveryRepository = Mockito.mock(DeliveryRepository.class);
+        reminderService = new ReminderService(reminderRepository, smsService, deliveryRepository, deliveries);
     }
 
     @Test
@@ -35,8 +41,8 @@ class ReminderServiceTest {
                 scheduledAt,
                 "+12035550100");
 
-        Mockito.when(reminderRepository.save(Mockito.any(Reminder.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        Mockito.when(deliveries.createReminder(request))
+                .thenReturn(new Reminder(request.message(), request.phoneNumber(), request.scheduledAt()));
 
         ReminderResponse response = reminderService.createReminder(request);
 
@@ -45,14 +51,7 @@ class ReminderServiceTest {
         Assertions.assertEquals("+12035550100", response.phoneNumber());
         Assertions.assertEquals(ReminderStatus.PENDING, response.status());
 
-        ArgumentCaptor<Reminder> reminderCaptor = ArgumentCaptor.forClass(Reminder.class);
-        Mockito.verify(reminderRepository).save(reminderCaptor.capture());
-
-        Reminder reminderToSave = reminderCaptor.getValue();
-        Assertions.assertEquals("Take a walk", reminderToSave.getMessage());
-        Assertions.assertEquals(scheduledAt, reminderToSave.getScheduledAt());
-        Assertions.assertEquals("+12035550100", reminderToSave.getPhoneNumber());
-        Assertions.assertEquals(ReminderStatus.PENDING, reminderToSave.getStatus());
+        Mockito.verify(deliveries).createReminder(request);
     }
 
     @Test
@@ -81,53 +80,43 @@ class ReminderServiceTest {
     }
 
     @Test
-    void savesSentReminderAfterSmsSucceeds() {
-        LocalDateTime cutoff = LocalDateTime.now().plusDays(1);
-        Reminder reminder = new Reminder(
-                "Take a walk",
-                "+12035550100",
-                cutoff.minusMinutes(1));
-        Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(
-                        ReminderStatus.PENDING, cutoff))
+    void recordsAcceptanceBeforeFinalization() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 10, 8, 12, 0);
+        UUID id = UUID.randomUUID();
+        Reminder reminder = new Reminder("Take a walk", "+12035550100", cutoff.minusMinutes(1));
+        reminder.setCurrentDeliveryId(id);
+        Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(ReminderStatus.PENDING, cutoff))
                 .thenReturn(List.of(reminder));
-        String message = "TextLoop Reminder:\nTake a walk\n\nReply DONE, SNOOZE, or CANCEL.";
-        Mockito.doAnswer(invocation -> {
-            Assertions.assertEquals(ReminderStatus.PENDING, reminder.getStatus());
-            return null;
-        }).when(smsService).sendSms("+12035550100", message);
-        Mockito.when(reminderRepository.save(reminder)).thenAnswer(invocation -> {
-            Assertions.assertEquals(ReminderStatus.SENT, reminder.getStatus());
-            return reminder;
-        });
+        var submission = new DeliveryTransactions.Submission(id, 1, reminder.getPhoneNumber(), Delivery.renderMessage(reminder.getMessage()));
+        Mockito.when(deliveries.claim(id, cutoff)).thenReturn(Optional.of(submission));
+        var result = SmsSubmissionResult.accepted(null);
+        Mockito.when(smsService.sendSms(id, submission.phoneNumber(), submission.message())).thenReturn(result);
 
         reminderService.processDueReminders(cutoff);
 
-        InOrder inOrder = Mockito.inOrder(smsService, reminderRepository);
-        inOrder.verify(smsService).sendSms("+12035550100", message);
-        inOrder.verify(reminderRepository).save(reminder);
-        Assertions.assertEquals(ReminderStatus.SENT, reminder.getStatus());
+        InOrder order = Mockito.inOrder(deliveries, smsService);
+        order.verify(deliveries).claim(id, cutoff);
+        order.verify(smsService).sendSms(id, submission.phoneNumber(), submission.message());
+        order.verify(deliveries).recordResult(id, 1, result);
+        order.verify(deliveries).finalizeAccepted(id);
     }
 
     @Test
-    void leavesReminderPendingAndUnsavedWhenSmsThrows() {
-        LocalDateTime cutoff = LocalDateTime.now().plusDays(1);
-        Reminder reminder = new Reminder(
-                "Take a walk",
-                "+12035550100",
-                cutoff.minusMinutes(1));
-        Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(
-                        ReminderStatus.PENDING, cutoff))
+    void unexpectedSenderExceptionPropagatesWithoutRecordingRejection() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 10, 8, 12, 0);
+        UUID id = UUID.randomUUID();
+        Reminder reminder = new Reminder("Take a walk", "+12035550100", cutoff.minusMinutes(1));
+        reminder.setCurrentDeliveryId(id);
+        Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(ReminderStatus.PENDING, cutoff))
                 .thenReturn(List.of(reminder));
-        RuntimeException sendFailure = new RuntimeException("SMS send failed");
-        Mockito.doThrow(sendFailure).when(smsService)
-                .sendSms(Mockito.anyString(), Mockito.anyString());
+        var submission = new DeliveryTransactions.Submission(id, 1, reminder.getPhoneNumber(), Delivery.renderMessage(reminder.getMessage()));
+        Mockito.when(deliveries.claim(id, cutoff)).thenReturn(Optional.of(submission));
+        RuntimeException failure = new IllegalStateException("Unclassified sender failure");
+        Mockito.when(smsService.sendSms(id, submission.phoneNumber(), submission.message())).thenThrow(failure);
 
-        RuntimeException thrown = Assertions.assertThrows(
-                RuntimeException.class,
-                () -> reminderService.processDueReminders(cutoff));
-
-        Assertions.assertSame(sendFailure, thrown);
-        Assertions.assertEquals(ReminderStatus.PENDING, reminder.getStatus());
-        Mockito.verify(reminderRepository, Mockito.never()).save(Mockito.any(Reminder.class));
+        Assertions.assertSame(failure, Assertions.assertThrows(RuntimeException.class,
+                () -> reminderService.processDueReminders(cutoff)));
+        Mockito.verify(deliveries, Mockito.never()).recordResult(Mockito.any(), Mockito.anyInt(), Mockito.any());
+        Mockito.verify(deliveries, Mockito.never()).finalizeAccepted(Mockito.any());
     }
 }

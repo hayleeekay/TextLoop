@@ -4,13 +4,10 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 
 import com.haylee.textloop.reminder.ReminderService;
 
-@Component
 public class ReminderScheduler {
-    private static final long CHECK_INTERVAL_MILLISECONDS = 60_000;
 
     private final ReminderService reminderService;
     private final Clock clock;
@@ -20,7 +17,7 @@ public class ReminderScheduler {
         this.clock = clock;
     }
 
-    @Scheduled(fixedRate = CHECK_INTERVAL_MILLISECONDS)
+    @Scheduled(fixedRateString = "${textloop.reminders.check-interval-ms:60000}")
     public void processDueReminders() {
         LocalDateTime cutoff = LocalDateTime.now(clock);
         reminderService.processDueReminders(cutoff);
