@@ -3,27 +3,30 @@ package com.haylee.textloop.reminder;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 
-/** Recovery failure reporting also covers configuration binding before a context exists. */
+/** Recovery failure reporting covers configuration loading and binding before a context exists. */
 public class RecoverySpringApplication extends SpringApplication {
+    private final RecoveryModeListener earlyRecoveryMode = new RecoveryModeListener(true);
     private final RecoveryModeListener recoveryMode = new RecoveryModeListener();
     private ConfigurableApplicationContext startupContext;
 
     public RecoverySpringApplication(Class<?>... primarySources) {
         super(primarySources);
-        addListeners(recoveryMode);
+        // Inspect explicit options before loading, then include settings from successfully loaded files.
+        addListeners(earlyRecoveryMode, recoveryMode);
     }
 
     @Override
     public ConfigurableApplicationContext run(String... args) {
+        earlyRecoveryMode.reset();
         recoveryMode.reset();
         startupContext = null;
         try {
             return super.run(args);
         } catch (RuntimeException failure) {
-            if (!recoveryMode.isRecoveryMode()) {
+            if (!earlyRecoveryMode.isRecoveryMode() && !recoveryMode.isRecoveryMode()) {
                 throw failure;
             }
-            // Boot's reporter handles context-backed failures; early binding failures need this fallback.
+            // Boot's reporter handles context-backed failures; configuration loading/binding needs this fallback.
             if (startupContext == null
                     || !startupContext.getEnvironment().getProperty("textloop.recovery", Boolean.class, false)) {
                 RecoveryFailureReporter.reportFailure();
