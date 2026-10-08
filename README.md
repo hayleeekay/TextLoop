@@ -37,6 +37,8 @@ Next development steps:
 - Parse and match `DONE`, `CANCEL`, and `SNOOZE`
 - Update reminder state and history
 
+For endpoint contracts and local request examples, see the [API guide](docs/api-guide.md).
+
 ## Version 1 Goal
 
 Build a complete SMS reminder system that can create, send, update, snooze, cancel,
