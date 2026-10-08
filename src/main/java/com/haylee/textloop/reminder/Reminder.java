@@ -1,6 +1,7 @@
 package com.haylee.textloop.reminder;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -33,6 +34,9 @@ public class Reminder {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ReminderStatus status;
+
+    // Nullable for legacy reminders, which are conservatively adopted before processing.
+    private UUID currentDeliveryId;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -96,6 +100,14 @@ public class Reminder {
 
     public void setStatus(ReminderStatus status) {
         this.status = status;
+    }
+
+    public UUID getCurrentDeliveryId() {
+        return currentDeliveryId;
+    }
+
+    public void setCurrentDeliveryId(UUID currentDeliveryId) {
+        this.currentDeliveryId = currentDeliveryId;
     }
 
     public LocalDateTime getCreatedAt() {

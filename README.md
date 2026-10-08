@@ -28,7 +28,7 @@ Currently implemented:
 - Create and retrieve reminders through the API
 - Store reminders in PostgreSQL as `PENDING` or `SENT`
 - Detect when pending reminders are due
-- Produce a simulated SMS and mark successful sends as `SENT`
+- Simulate SMS acceptance and finalize reminders as `SENT`
 - Run automated tests in GitHub Actions
 
 Next development steps:
@@ -74,11 +74,16 @@ Reminder delivery currently follows:
 ```text
 Scheduler
     -> Reminder service
-    -> find due PENDING reminders
+    -> select due reminders with an eligible delivery
+    -> commit UNKNOWN before submitting
     -> SmsService interface
     -> FakeSmsService
-    -> save reminder as SENT
+    -> record sender acceptance
+    -> finalize reminder as SENT
 ```
+
+Known retryable rejections have a bounded retry budget. Uncertain submissions remain
+held for [local recovery](docs/delivery-recovery.md).
 
 A real SMS implementation can later replace the fake sender without tying reminder
 logic to a specific provider.

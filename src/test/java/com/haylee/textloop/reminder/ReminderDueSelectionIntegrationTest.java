@@ -15,6 +15,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.haylee.textloop.PostgreSQLTestConfiguration;
 import com.haylee.textloop.sms.SmsService;
+import com.haylee.textloop.sms.SmsSubmissionResult;
+import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 
 @SpringBootTest
 @Import(PostgreSQLTestConfiguration.class)
@@ -32,6 +34,8 @@ class ReminderDueSelectionIntegrationTest {
     @BeforeEach
     void clearReminders() {
         reminderRepository.deleteAll();
+        Mockito.when(smsService.sendSms(Mockito.any(), Mockito.anyString(), Mockito.anyString()))
+                .thenReturn(SmsSubmissionResult.accepted(null));
     }
 
     @Test
@@ -71,10 +75,9 @@ class ReminderDueSelectionIntegrationTest {
     @Test
     void persistsSentStatusAndDoesNotSendAgainOnLaterPass() {
         LocalDateTime cutoff = LocalDateTime.now().plusDays(1).withNano(0);
-        Reminder reminder = reminderRepository.save(new Reminder(
-                "Take a walk",
-                "+12035550100",
-                cutoff.minusMinutes(1)));
+        var response = reminderService.createReminder(new CreateReminderRequest(
+                "Take a walk", cutoff.minusMinutes(1), "+12035550100"));
+        Reminder reminder = reminderRepository.findById(response.id()).orElseThrow();
 
         reminderService.processDueReminders(cutoff);
 
@@ -84,7 +87,7 @@ class ReminderDueSelectionIntegrationTest {
         reminderService.processDueReminders(cutoff.plusMinutes(1));
 
         Mockito.verify(smsService).sendSms(
-                "+12035550100",
+                reminder.getCurrentDeliveryId(), "+12035550100",
                 "TextLoop Reminder:\nTake a walk\n\nReply DONE, SNOOZE, or CANCEL.");
         Mockito.verifyNoMoreInteractions(smsService);
     }
