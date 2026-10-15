@@ -224,7 +224,7 @@ curl -i --request POST http://localhost:8080/api/inbound-replies \
 `204 No Content`, with an empty response body.
 
 Submitting `DONE` does not complete a reminder. Other nonblank messages are also
-accepted because command parsing is not implemented.
+accepted because the receipt endpoint does not use command parsing yet.
 
 ### Errors
 

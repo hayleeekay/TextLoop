@@ -41,7 +41,17 @@ class InboundReplyIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"DONE, NO_CONTENT", "' ', BAD_REQUEST"})
+    @CsvSource({
+            "DONE, NO_CONTENT",
+            "'  cAnCeL  ', NO_CONTENT",
+            "snooze, NO_CONTENT",
+            "SNOOZE 30, NO_CONTENT",
+            "DONE please, NO_CONTENT",
+            "DONE!, NO_CONTENT",
+            "SCHEDULE, NO_CONTENT",
+            "an arbitrary reply, NO_CONTENT",
+            "' ', BAD_REQUEST"
+    })
     void requestsLeavePersistedRemindersUnchanged(String body, HttpStatus expectedStatus) {
         List<ReminderSnapshot> before = snapshotReminders();
         long countBefore = reminderRepository.count();
