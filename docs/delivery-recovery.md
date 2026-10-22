@@ -20,8 +20,9 @@ Later lists do not change existing delivery outcomes.
 
 The list omits phone numbers, message text, and provider references. It includes the
 current-intent flag, outcome/reason, attempt count, next retry time, exhaustion,
-recovery metadata, and the version token required for writes. Older unknown records
-remain listed after replacement. An `ACCEPTED` current delivery with a `PENDING`
+recovery metadata, withdrawal time, and the delivery version token required for
+writes. This token is separate from the reminder version used by the HTTP API. Older
+unknown records remain listed after replacement. An `ACCEPTED` current delivery with a `PENDING`
 reminder needs finalization.
 
 | State | Meaning |
@@ -67,11 +68,13 @@ Other actions use the same delivery, version, and stopped-application options:
 Missing logs, elapsed time, or an absent callback are not evidence of non-acceptance.
 A replacement creates a linked new delivery ID with the original payload snapshot;
 the original uncertainty is preserved. All writes require the expected version and
-current pending intent. Stale or inactive intents are refused. Do not reset reminder
-status or edit delivery rows by hand to bypass these checks.
+current pending intent on an unwithdrawn reminder. Stale, withdrawn, or inactive
+intents are refused. Do not reset reminder status or edit delivery rows by hand to
+bypass these checks.
 
 Retries preserve the intended delivery ID. A future snooze must create a new intent;
-snooze/cancel behavior is not implemented here. Separate commits protect recorded
-acceptance from a later reminder-update failure. They do not guarantee exactly-once
+text snooze/cancel behavior is not implemented here. The HTTP API supports withdrawal
+only before the first claim; it cannot change a claimed or held delivery. Separate
+commits protect recorded acceptance from a later reminder-update failure. They do not guarantee exactly-once
 external SMS. Real-provider mapping, reconciliation, and retry protections still need
 provider-specific verification before real SMS is enabled.

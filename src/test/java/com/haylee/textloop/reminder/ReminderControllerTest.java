@@ -51,7 +51,7 @@ class ReminderControllerTest {
                 "Take a walk",
                 scheduledAt,
                 "+12035550100",
-                ReminderStatus.PENDING);
+                ReminderStatus.PENDING, 0, null);
 
         Mockito.when(
                 reminderService.createReminder(Mockito.any(CreateReminderRequest.class)))
@@ -83,7 +83,7 @@ class ReminderControllerTest {
                 "Take a walk",
                 scheduledAt,
                 "+12035550100",
-                ReminderStatus.PENDING);
+                ReminderStatus.PENDING, 0, null);
 
         Mockito.when(reminderService.getReminders())
                 .thenReturn(List.of(serviceResponse));

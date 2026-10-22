@@ -11,11 +11,12 @@ import org.springframework.data.jpa.repository.Query;
 import jakarta.persistence.LockModeType;
 
 public interface ReminderRepository extends JpaRepository<Reminder, Long> {
-    List<Reminder> findByStatusAndScheduledAtLessThanEqual(
+    List<Reminder> findByStatusAndWithdrawnAtIsNullAndScheduledAtLessThanEqual(
             ReminderStatus status,
             LocalDateTime scheduledAt);
 
-    @Query("select r.id from Reminder r where r.status = 'PENDING' and r.currentDeliveryId is null")
+    @Query("select r.id from Reminder r where r.status = 'PENDING' "
+            + "and r.withdrawnAt is null and r.currentDeliveryId is null")
     List<Long> findUntrackedPendingIds();
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

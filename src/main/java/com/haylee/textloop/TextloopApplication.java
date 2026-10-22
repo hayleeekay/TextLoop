@@ -4,9 +4,11 @@ import java.time.Clock;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.haylee.textloop.reminder.RecoveryFailureException;
 import com.haylee.textloop.reminder.RecoverySpringApplication;
 
@@ -32,6 +34,11 @@ public class TextloopApplication {
     @Bean
     Clock clock() {
         return Clock.systemDefaultZone();
+    }
+
+    @Bean
+    Jackson2ObjectMapperBuilderCustomizer rejectFractionalIntegers() {
+        return builder -> builder.featuresToDisable(DeserializationFeature.ACCEPT_FLOAT_AS_INT);
     }
 
 }

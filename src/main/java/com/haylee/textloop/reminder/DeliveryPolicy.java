@@ -8,6 +8,10 @@ final class DeliveryPolicy {
 
     private DeliveryPolicy() {}
 
+    static boolean editable(Delivery delivery) {
+        return delivery.getState() == DeliveryState.READY && delivery.getAttemptCount() == 0;
+    }
+
     static boolean eligible(Delivery delivery, LocalDateTime now) {
         if (delivery.getState() == DeliveryState.READY) {
             return true;

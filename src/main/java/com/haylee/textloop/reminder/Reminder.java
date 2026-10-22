@@ -1,7 +1,10 @@
 package com.haylee.textloop.reminder;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+
+import org.hibernate.annotations.ColumnDefault;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,6 +16,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "reminders")
@@ -37,6 +41,13 @@ public class Reminder {
 
     // Nullable for legacy reminders, which are conservatively adopted before processing.
     private UUID currentDeliveryId;
+
+    private LocalDateTime withdrawnAt;
+
+    @Version
+    @Column(nullable = false)
+    @ColumnDefault("0")
+    private long version;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -116,5 +127,18 @@ public class Reminder {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public LocalDateTime getWithdrawnAt() {
+        return withdrawnAt;
+    }
+
+    void withdraw(LocalDateTime now) {
+        // PostgreSQL timestamps store microseconds; return the same value that will be persisted.
+        withdrawnAt = now.truncatedTo(ChronoUnit.MICROS);
+    }
+
+    public long getVersion() {
+        return version;
     }
 }

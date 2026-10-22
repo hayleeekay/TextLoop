@@ -9,5 +9,7 @@ public record ReminderResponse(
         String message,
         LocalDateTime scheduledAt,
         String phoneNumber,
-        ReminderStatus status) {
+        ReminderStatus status,
+        long version,
+        LocalDateTime withdrawnAt) {
 }

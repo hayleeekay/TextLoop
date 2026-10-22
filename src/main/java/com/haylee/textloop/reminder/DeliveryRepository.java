@@ -19,7 +19,8 @@ public interface DeliveryRepository extends JpaRepository<Delivery, UUID> {
     Optional<Delivery> findLockedById(UUID id);
 
     @Query("select d.id from Delivery d where d.state = 'ACCEPTED' "
-            + "and d.reminder.status = 'PENDING' and d.reminder.currentDeliveryId = d.id")
+            + "and d.reminder.status = 'PENDING' and d.reminder.withdrawnAt is null "
+            + "and d.reminder.currentDeliveryId = d.id")
     List<UUID> findAwaitingFinalization();
 
     List<Delivery> findAllByOrderByCreatedAtAscIdAsc();

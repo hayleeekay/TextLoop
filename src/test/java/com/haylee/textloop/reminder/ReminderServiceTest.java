@@ -74,7 +74,7 @@ class ReminderServiceTest {
                         "Take a walk",
                         scheduledAt,
                         "+12035550100",
-                        ReminderStatus.PENDING)),
+                        ReminderStatus.PENDING, 0, null)),
                 responses);
         Mockito.verify(reminderRepository).findAll();
     }
@@ -85,7 +85,7 @@ class ReminderServiceTest {
         UUID id = UUID.randomUUID();
         Reminder reminder = new Reminder("Take a walk", "+12035550100", cutoff.minusMinutes(1));
         reminder.setCurrentDeliveryId(id);
-        Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(ReminderStatus.PENDING, cutoff))
+        Mockito.when(reminderRepository.findByStatusAndWithdrawnAtIsNullAndScheduledAtLessThanEqual(ReminderStatus.PENDING, cutoff))
                 .thenReturn(List.of(reminder));
         var submission = new DeliveryTransactions.Submission(id, 1, reminder.getPhoneNumber(), Delivery.renderMessage(reminder.getMessage()));
         Mockito.when(deliveries.claim(id, cutoff)).thenReturn(Optional.of(submission));
@@ -107,7 +107,7 @@ class ReminderServiceTest {
         UUID id = UUID.randomUUID();
         Reminder reminder = new Reminder("Take a walk", "+12035550100", cutoff.minusMinutes(1));
         reminder.setCurrentDeliveryId(id);
-        Mockito.when(reminderRepository.findByStatusAndScheduledAtLessThanEqual(ReminderStatus.PENDING, cutoff))
+        Mockito.when(reminderRepository.findByStatusAndWithdrawnAtIsNullAndScheduledAtLessThanEqual(ReminderStatus.PENDING, cutoff))
                 .thenReturn(List.of(reminder));
         var submission = new DeliveryTransactions.Submission(id, 1, reminder.getPhoneNumber(), Delivery.renderMessage(reminder.getMessage()));
         Mockito.when(deliveries.claim(id, cutoff)).thenReturn(Optional.of(submission));
