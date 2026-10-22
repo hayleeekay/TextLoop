@@ -2,7 +2,10 @@ package com.haylee.textloop.reminder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -13,21 +16,26 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.haylee.textloop.PostgreSQLTestConfiguration;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
@@ -37,13 +45,21 @@ import com.haylee.textloop.reminder.dto.WithdrawReminderRequest;
 import com.haylee.textloop.sms.SmsSubmissionResult;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import(PostgreSQLTestConfiguration.class)
+@Import({PostgreSQLTestConfiguration.class, ReminderMutationIntegrationTest.PreciseClock.class})
 @ExtendWith(OutputCaptureExtension.class)
 class ReminderMutationIntegrationTest {
     @Autowired TestRestTemplate http;
     @Autowired ReminderRepository reminders;
     @Autowired DeliveryRepository deliveries;
     @Autowired DeliveryTransactions transactions;
+    @Autowired JdbcTemplate jdbc;
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class PreciseClock {
+        @Bean @Primary Clock preciseClock() {
+            return Clock.fixed(Instant.parse("2026-10-22T12:00:00.123456789Z"), ZoneOffset.UTC);
+        }
+    }
 
     @BeforeEach
     void clearRows() {
@@ -106,6 +122,7 @@ class ReminderMutationIntegrationTest {
         ReminderResponse withdrawn = response.getBody();
         Reminder saved = reminders.findById(created.id()).orElseThrow();
         assertThat(withdrawn.withdrawnAt()).isNotNull().isEqualTo(saved.getWithdrawnAt());
+        assertThat(withdrawn.withdrawnAt()).isEqualTo(LocalDateTime.of(2026, 10, 22, 12, 0, 0, 123456000));
         assertThat(withdrawn.version()).isGreaterThan(created.version()).isEqualTo(saved.getVersion());
         assertThat(withdrawn.status()).isEqualTo(ReminderStatus.PENDING);
         assertThat(saved.getCurrentDeliveryId()).isEqualTo(before.getCurrentDeliveryId());
@@ -191,6 +208,49 @@ class ReminderMutationIntegrationTest {
             assertThat(response.getBody()).isEqualTo("{\"code\":\"STALE_VERSION\"}");
         }
         assertUnchanged(created);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    void fractionalVersionsAreRejectedWithoutStoredChanges(boolean withdraw, boolean negative, CapturedOutput output) {
+        ReminderResponse created = create();
+        if (negative) {
+            // Upgraded legacy rows start at zero, where truncating -0.9 would otherwise match.
+            jdbc.update("update reminders set version = 0 where id = ?", created.id());
+        }
+        var before = storedRows();
+        String version = negative ? "-0.9" : created.version() + ".9";
+        String body = withdraw ? "{\"expectedVersion\":" + version + "}"
+                : "{\"message\":\"private-invalid-marker\",\"scheduledAt\":\"" + created.scheduledAt()
+                        + "\",\"expectedVersion\":" + version + "}";
+        var headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        var response = http.exchange(path(created.id(), withdraw), withdraw ? HttpMethod.POST : HttpMethod.PUT,
+                new HttpEntity<>(body, headers), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).doesNotContain("private-invalid-marker", "+12035550100");
+        assertThat(output).doesNotContain("private-invalid-marker", "+12035550100");
+        assertThat(storedRows()).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void malformedPathIdIsRejectedWithoutExposingValueOrChangingStorage(boolean withdraw, CapturedOutput output) {
+        ReminderResponse created = create();
+        var before = storedRows();
+        String url = "/api/reminders/private-id-marker" + (withdraw ? "/withdraw" : "");
+        var response = http.exchange(url, withdraw ? HttpMethod.POST : HttpMethod.PUT,
+                new HttpEntity<>(request(created, withdraw)), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isEqualTo("{\"code\":\"INVALID_ID\"}")
+                .doesNotContain("private-id-marker");
+        assertThat(output).doesNotContain("private-id-marker");
+        assertThat(storedRows()).isEqualTo(before);
+    }
+
+    private List<?> storedRows() {
+        return List.of(jdbc.queryForList("select * from reminders order by id"),
+                jdbc.queryForList("select * from deliveries order by id"));
     }
 
     @ParameterizedTest

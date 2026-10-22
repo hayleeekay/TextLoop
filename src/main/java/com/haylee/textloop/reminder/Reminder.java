@@ -1,6 +1,7 @@
 package com.haylee.textloop.reminder;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import org.hibernate.annotations.ColumnDefault;
@@ -133,7 +134,8 @@ public class Reminder {
     }
 
     void withdraw(LocalDateTime now) {
-        withdrawnAt = now;
+        // PostgreSQL timestamps store microseconds; return the same value that will be persisted.
+        withdrawnAt = now.truncatedTo(ChronoUnit.MICROS);
     }
 
     public long getVersion() {

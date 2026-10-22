@@ -162,10 +162,12 @@ procedure for delivery uncertainty. There is no ordinary undo-withdraw operation
 
 Invalid required fields, malformed JSON, and invalid version values return generic
 `400 Bad Request` responses without rejected values, as with creation validation.
-Other refusals return a fixed JSON code:
+Fractional version numbers are rejected. Malformed path IDs return a fixed response
+that omits the rejected identifier. Other refusals also return a fixed JSON code:
 
 | HTTP status | `code` | Meaning |
 | --- | --- | --- |
+| `400` | `INVALID_ID` | The path identifier cannot be converted to a reminder ID. |
 | `400` | `INVALID_SCHEDULE` | The proposed time is no longer in the future when checked under the locks. |
 | `404` | `NOT_FOUND` | The reminder does not exist. |
 | `409` | `STALE_VERSION` | The reminder version changed. Retrieve it again before deciding what to do. |

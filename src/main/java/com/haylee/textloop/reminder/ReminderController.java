@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
@@ -65,6 +66,11 @@ public class ReminderController {
             case STALE_VERSION, NOT_EDITABLE -> HttpStatus.CONFLICT;
         };
         return ResponseEntity.status(status).body(Map.of("code", failure.getReason().name()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, String>> invalidReminderId() {
+        return ResponseEntity.badRequest().body(Map.of("code", "INVALID_ID"));
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
