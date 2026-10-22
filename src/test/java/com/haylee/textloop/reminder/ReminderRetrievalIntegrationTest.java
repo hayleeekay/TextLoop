@@ -69,6 +69,6 @@ class ReminderRetrievalIntegrationTest {
                 reminder.getMessage(),
                 reminder.getScheduledAt(),
                 reminder.getPhoneNumber(),
-                reminder.getStatus());
+                reminder.getStatus(), reminder.getVersion(), reminder.getWithdrawnAt());
     }
 }

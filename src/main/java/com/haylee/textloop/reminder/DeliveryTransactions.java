@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
+import com.haylee.textloop.reminder.dto.EditReminderRequest;
 import com.haylee.textloop.sms.SmsSubmissionResult;
 
 /** Short committed units of work. The sender is deliberately absent from these transactions. */
@@ -33,11 +34,51 @@ public class DeliveryTransactions {
         return reminder;
     }
 
+    public Reminder editReminder(Long id, EditReminderRequest request) {
+        Delivery previous = lockEditable(id, request.expectedVersion());
+        if (!request.scheduledAt().isAfter(now())) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.INVALID_SCHEDULE);
+        }
+        Reminder reminder = previous.getReminder();
+        reminder.setMessage(request.message());
+        reminder.setScheduledAt(request.scheduledAt());
+        Delivery replacement = new Delivery(reminder, now(), false);
+        replacement.linkPrevious(previous);
+        deliveries.save(replacement);
+        reminder.setCurrentDeliveryId(replacement.getId());
+        return reminder;
+    }
+
+    public Reminder withdrawReminder(Long id, long expectedVersion) {
+        Reminder reminder = lockEditable(id, expectedVersion).getReminder();
+        // Keep the pointer and snapshot: a withdrawn alert is not an untracked legacy reminder.
+        reminder.withdraw(now());
+        return reminder;
+    }
+
+    private Delivery lockEditable(Long id, long expectedVersion) {
+        Reminder reminder = reminders.findLockedById(id)
+                .orElseThrow(() -> new ReminderMutationException(ReminderMutationException.Reason.NOT_FOUND));
+        if (reminder.getVersion() != expectedVersion) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.STALE_VERSION);
+        }
+        if (reminder.getCurrentDeliveryId() == null) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.NOT_EDITABLE);
+        }
+        Delivery delivery = deliveries.findLockedById(reminder.getCurrentDeliveryId())
+                .orElseThrow(() -> new ReminderMutationException(ReminderMutationException.Reason.NOT_EDITABLE));
+        if (!currentPending(delivery) || !DeliveryPolicy.editable(delivery)) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.NOT_EDITABLE);
+        }
+        return delivery;
+    }
+
     public void initializeLegacy() {
         LocalDateTime cutover = now();
         for (Long id : reminders.findUntrackedPendingIds()) {
             Reminder reminder = reminders.findLockedById(id).orElseThrow();
-            if (reminder.getStatus() == ReminderStatus.PENDING && reminder.getCurrentDeliveryId() == null) {
+            if (reminder.getStatus() == ReminderStatus.PENDING && reminder.getWithdrawnAt() == null
+                    && reminder.getCurrentDeliveryId() == null) {
                 // The previous implementation cannot establish whether an overdue row already sent.
                 attachDelivery(reminder, !reminder.getScheduledAt().isAfter(cutover));
             }
@@ -117,7 +158,7 @@ public class DeliveryTransactions {
             return new DeliveryInspection(delivery.getId(), reminder.getId(), delivery.getVersion(),
                     delivery.getState(), delivery.getReason(), delivery.getAttemptCount(), delivery.getNextAttemptAt(),
                     delivery.isExtraAttemptPermitted(), DeliveryPolicy.exhausted(delivery),
-                    delivery.getId().equals(reminder.getCurrentDeliveryId()), reminder.getStatus(),
+                    delivery.getId().equals(reminder.getCurrentDeliveryId()), reminder.getStatus(), reminder.getWithdrawnAt(),
                     delivery.getRecoveryAction(), delivery.getRecoveredAt(), delivery.getReplacesDeliveryId());
         }).toList();
     }
@@ -131,6 +172,7 @@ public class DeliveryTransactions {
     private boolean currentPending(Delivery delivery) {
         Reminder reminder = delivery.getReminder();
         return reminder.getStatus() == ReminderStatus.PENDING
+                && reminder.getWithdrawnAt() == null
                 && delivery.getId().equals(reminder.getCurrentDeliveryId());
     }
 
@@ -163,6 +205,7 @@ public class DeliveryTransactions {
     /** Payload-free recovery output; version is the required token for every write. */
     public record DeliveryInspection(UUID deliveryId, Long reminderId, long version, DeliveryState state,
             DeliveryReason reason, int attemptCount, LocalDateTime nextAttemptAt, boolean extraAttemptPermitted,
-            boolean retryExhausted, boolean current, ReminderStatus reminderStatus, RecoveryAction recoveryAction,
+            boolean retryExhausted, boolean current, ReminderStatus reminderStatus, LocalDateTime withdrawnAt,
+            RecoveryAction recoveryAction,
             LocalDateTime recoveredAt, UUID replacesDeliveryId) {}
 }

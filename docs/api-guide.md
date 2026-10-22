@@ -1,7 +1,7 @@
 # TextLoop API
 
-TextLoop's development API supports creating and retrieving reminders, simulating
-inbound replies, and checking whether the application responds.
+TextLoop's development API supports creating, editing, withdrawing, and retrieving
+reminders, simulating inbound replies, and checking whether the application responds.
 
 These examples assume the backend is running locally at `http://localhost:8080`.
 Adjust the URL if you use another port. There is currently no authentication or
@@ -10,12 +10,14 @@ hosted API.
 | Action | Endpoint | Successful response |
 | --- | --- | --- |
 | [Create a reminder](#create-a-reminder) | `POST /api/reminders` | `201 Created` |
+| [Edit a reminder](#edit-a-reminder) | `PUT /api/reminders/{id}` | `200 OK` |
+| [Withdraw a reminder](#withdraw-a-reminder) | `POST /api/reminders/{id}/withdraw` | `200 OK` |
 | [Retrieve reminders](#retrieve-reminders) | `GET /api/reminders` | `200 OK` |
 | [Simulate an inbound reply](#simulate-an-inbound-reply) | `POST /api/inbound-replies` | `204 No Content` |
 | [Check health](#check-health) | `GET /health` | `200 OK` |
 
-POST requests use JSON with `Content-Type: application/json`. Example phone numbers
-are fictional, and response IDs are illustrative.
+POST and PUT requests use JSON with `Content-Type: application/json`. Example phone
+numbers are fictional, and response IDs are illustrative.
 
 ## Create a reminder
 
@@ -63,7 +65,9 @@ curl -i --request POST http://localhost:8080/api/reminders \
   "message": "Take a walk",
   "scheduledAt": "2030-01-15T14:30:00",
   "phoneNumber": "+12035550100",
-  "status": "PENDING"
+  "status": "PENDING",
+  "version": 1,
+  "withdrawnAt": null
 }
 ```
 
@@ -72,7 +76,9 @@ The response includes the submitted fields plus:
 | Field | JSON type | Description |
 | --- | --- | --- |
 | `id` | integer | Server-assigned reminder identifier. |
-| `status` | string | Current reminder state: `PENDING` or `SENT`. New reminders start as `PENDING`. |
+| `status` | string | Acceptance-tracking state: `PENDING` or `SENT`. New reminders start as `PENDING`. |
+| `version` | integer | Current reminder version. Copy it into `expectedVersion` when editing or withdrawing; do not assume a starting value. |
+| `withdrawnAt` | string (date-time) or null | Server-local withdrawal time. A non-null value means the alert was withdrawn, even though its status remains `PENDING`. |
 
 **Storage:** Reminders are persisted in PostgreSQL's `reminders` table. The response
 contains selected fields rather than the complete database row. Delivery tracking
@@ -92,6 +98,81 @@ Validation errors return generic JSON containing the status, error name, and
 request path. They do not include field-specific validation messages or rejected
 values. Use the request-field table to check the input.
 
+## Edit a reminder
+
+`PUT /api/reminders/{id}`
+
+Correct the message or scheduled time of an alert before its first send claim.
+Both `message` and `scheduledAt` are required, along with the `expectedVersion`
+from the latest create/list/mutation response. Phone-number changes are not supported.
+For a message-only correction, supply its existing future time.
+
+```bash
+curl -i --request PUT http://localhost:8080/api/reminders/42 \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "message": "Take a longer walk",
+    "scheduledAt": "2030-01-15T15:00:00",
+    "expectedVersion": 1
+  }'
+```
+
+`message` uses the creation constraints. The new time must be strictly after the
+server's current local time after it obtains the database locks. `expectedVersion`
+must be a nonnegative integer. Accepted message text is stored unchanged.
+
+Success returns `200 OK` with the same fields as the create response and an updated
+version. The correction saves a new delivery snapshot and prevents the obsolete
+intent from sending, including after restart. Earlier snapshots stay unchanged.
+
+## Withdraw a reminder
+
+`POST /api/reminders/{id}/withdraw`
+
+Stop an alert before its first send claim, without deleting its saved records or
+marking anything complete.
+
+```bash
+curl -i --request POST http://localhost:8080/api/reminders/42/withdraw \
+  --header 'Content-Type: application/json' \
+  --data '{"expectedVersion": 1}'
+```
+
+`expectedVersion` is required and must be a nonnegative integer. Success returns
+`200 OK` with the reminder, an updated version, and a non-null `withdrawnAt`.
+The message, scheduled time, phone number, and delivery snapshot remain stored.
+
+### Editing and withdrawal boundaries
+
+Both operations require an unwithdrawn `PENDING` reminder whose current delivery is
+`READY` and has never been claimed. They remain available after the scheduled time
+passes if no claim has happened. An edit still requires a new future time.
+
+The send claim and corrections use the same database lock order. If the correction
+commits first, the obsolete alert cannot send. If the claim commits first, the
+correction conflicts; it cannot recall the attempt or prevent its outcome recording.
+Two corrections using one version have only one winner.
+
+Claimed, uncertain, rejected, accepted, sent, and withdrawn alerts cannot be edited
+or withdrawn through these endpoints. Ordinary corrections cannot clear an `UNKNOWN`
+hold, reset a used retry budget, or grant another attempt. Use the existing recovery
+procedure for delivery uncertainty. There is no ordinary undo-withdraw operation.
+
+### Mutation errors
+
+Invalid required fields, malformed JSON, and invalid version values return generic
+`400 Bad Request` responses without rejected values, as with creation validation.
+Other refusals return a fixed JSON code:
+
+| HTTP status | `code` | Meaning |
+| --- | --- | --- |
+| `400` | `INVALID_SCHEDULE` | The proposed time is no longer in the future when checked under the locks. |
+| `404` | `NOT_FOUND` | The reminder does not exist. |
+| `409` | `STALE_VERSION` | The reminder version changed. Retrieve it again before deciding what to do. |
+| `409` | `NOT_EDITABLE` | The current alert is no longer eligible for ordinary edits or withdrawal. |
+
+For example: `{"code":"STALE_VERSION"}`. Refused mutations leave stored state unchanged.
+
 ## What happens next
 
 The normal application's scheduler runs at a 60-second interval by default. It
@@ -100,7 +181,8 @@ send. A separate delivery record determines whether submission is permitted.
 
 Creating a reminder also saves its current delivery intent: a delivery ID and a
 snapshot of the phone number and full rendered message. Retries use that same ID
-and snapshot.
+and snapshot. New snapshots contain `TextLoop Reminder:` followed by the message,
+without reply instructions. Historical snapshots keep their original text.
 
 For an eligible delivery, TextLoop:
 
@@ -116,12 +198,13 @@ logging the phone number or rendered message. It does not send a real SMS.
 
 | Status | Meaning |
 | --- | --- |
-| `PENDING` | The reminder's current sender acceptance has not been finalized. Its delivery may be waiting, held, or accepted but awaiting finalization. |
+| `PENDING` | The reminder's current sender acceptance has not been finalized. Its delivery may be waiting, held, accepted but awaiting finalization, or withdrawn. |
 | `SENT` | The reminder's current sender acceptance has been finalized. This does not confirm delivery to a phone. |
 
 The scheduled time determines eligibility for processing, rather than an exact
 sending time. Delivery outcomes such as `UNKNOWN` and `ACCEPTED` are internal
-tracking states, not values of the API's `status` field.
+tracking states, not values of the API's `status` field. A non-null `withdrawnAt`
+prevents sending regardless of the retained `PENDING` status.
 
 ### Retries and recovery
 
@@ -156,7 +239,7 @@ verification before connecting a real sender.
 
 `GET /api/reminders`
 
-Retrieve all stored reminders and their current statuses.
+Retrieve all stored reminders, including withdrawn reminders, and their current statuses.
 
 ### Example request
 
@@ -175,7 +258,9 @@ curl -i http://localhost:8080/api/reminders
     "message": "Take a walk",
     "scheduledAt": "2030-01-15T14:30:00",
     "phoneNumber": "+12035550100",
-    "status": "PENDING"
+    "status": "PENDING",
+    "version": 1,
+    "withdrawnAt": null
   }
 ]
 ```

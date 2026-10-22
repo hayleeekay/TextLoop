@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
+import com.haylee.textloop.reminder.dto.EditReminderRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
 import com.haylee.textloop.sms.SmsService;
 import com.haylee.textloop.sms.SmsSubmissionResult;
@@ -36,6 +37,14 @@ public class ReminderService {
         return toResponse(deliveries.createReminder(request));
     }
 
+    public ReminderResponse editReminder(Long id, EditReminderRequest request) {
+        return toResponse(deliveries.editReminder(id, request));
+    }
+
+    public ReminderResponse withdrawReminder(Long id, long expectedVersion) {
+        return toResponse(deliveries.withdrawReminder(id, expectedVersion));
+    }
+
     public List<ReminderResponse> getReminders() {
         return reminderRepository.findAll().stream()
                 .map(this::toResponse)
@@ -43,7 +52,7 @@ public class ReminderService {
     }
 
     public List<Reminder> findDueReminders(LocalDateTime cutoff) {
-        return reminderRepository.findByStatusAndScheduledAtLessThanEqual(
+        return reminderRepository.findByStatusAndWithdrawnAtIsNullAndScheduledAtLessThanEqual(
                 ReminderStatus.PENDING,
                 cutoff);
     }
@@ -80,6 +89,8 @@ public class ReminderService {
                 reminder.getMessage(),
                 reminder.getScheduledAt(),
                 reminder.getPhoneNumber(),
-                reminder.getStatus());
+                reminder.getStatus(),
+                reminder.getVersion(),
+                reminder.getWithdrawnAt());
     }
 }

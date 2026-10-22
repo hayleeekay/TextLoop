@@ -75,7 +75,7 @@ public class Delivery {
     }
 
     static String renderMessage(String raw) {
-        return "TextLoop Reminder:\n" + raw + "\n\nReply DONE, SNOOZE, or CANCEL.";
+        return "TextLoop Reminder:\n" + raw;
     }
 
     void beginAttempt(LocalDateTime now) {
@@ -108,10 +108,14 @@ public class Delivery {
     }
 
     void replace(Delivery previous) {
-        replacesDeliveryId = previous.id;
+        linkPrevious(previous);
         // An intentional replacement repeats the original snapshot, not a mutable reminder.
         phoneNumber = previous.phoneNumber;
         message = previous.message;
+    }
+
+    void linkPrevious(Delivery previous) {
+        replacesDeliveryId = previous.id;
     }
 
     public UUID getId() {

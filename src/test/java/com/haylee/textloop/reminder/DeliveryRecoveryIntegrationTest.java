@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.boot.ExitCodeEvent;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -46,11 +47,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import com.haylee.textloop.LoggingStateExtension;
 import com.haylee.textloop.TextloopApplication;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
+import com.haylee.textloop.reminder.dto.EditReminderRequest;
 import com.haylee.textloop.scheduler.ReminderScheduler;
 import com.haylee.textloop.sms.SmsService;
 import com.haylee.textloop.sms.SmsSubmissionResult;
@@ -146,6 +150,209 @@ class DeliveryRecoveryIntegrationTest {
     private Delivery reload(UUID id) { return deliveryRows().findById(id).orElseThrow(); }
     private ReminderStatus reminderStatus(Delivery delivery) {
         return reminderRows().findById(delivery.getReminder().getId()).orElseThrow().getStatus();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void mutationBeforeClaimBlocksSelectedObsoleteIdAndSurvivesRestart(boolean withdraw) {
+        Delivery old = create("Obsolete deadline");
+        var before = reminderRows().findById(old.getReminder().getId()).orElseThrow();
+        if (withdraw) {
+            reminders().withdrawReminder(before.getId(), before.getVersion());
+        } else {
+            reminders().editReminder(before.getId(), new EditReminderRequest(
+                    "Corrected", now().plusHours(1), before.getVersion()));
+        }
+        assertThat(transactions().claim(old.getId(), now())).isEmpty();
+        assertThat(reload(old.getId()).getMessage()).isEqualTo(old.getMessage());
+        assertThat(reload(old.getId()).getState()).isEqualTo(DeliveryState.READY);
+        assertThat(reload(old.getId()).getAttemptCount()).isZero();
+        boot();
+        pass();
+        verifyNoInteractions(sender);
+        clock.advance(Duration.ofHours(1));
+        pass();
+        pass();
+        if (withdraw) {
+            verifyNoInteractions(sender);
+            assertThat(reminders().findDueReminders(now())).isEmpty();
+            assertThat(deliveryRows().count()).isEqualTo(1);
+            assertThat(transactions().inspect().getFirst().withdrawnAt()).isNotNull();
+            assertThatThrownBy(() -> transactions().recover(old.getId(), reload(old.getId()).getVersion(),
+                    RecoveryAction.CONFIRM_ACCEPTED, false)).isInstanceOf(RecoveryConflictException.class);
+        } else {
+            var current = reminderRows().findById(before.getId()).orElseThrow().getCurrentDeliveryId();
+            verify(sender, times(1)).sendSms(current, "+12035550100", "TextLoop Reminder:\nCorrected");
+        }
+        verify(sender, never()).sendSms(eq(old.getId()), anyString(), anyString());
+    }
+
+    @Test
+    void reschedulingFutureAlertSurvivesOldDeadlineAndSendsOnlyAtNewTime() {
+        var created = reminders().createReminder(new CreateReminderRequest(
+                "Future original", now().plusHours(1), "+12035550100"));
+        var oldId = reminderRows().findById(created.id()).orElseThrow().getCurrentDeliveryId();
+        reminders().editReminder(created.id(), new EditReminderRequest(
+                "Future corrected", now().plusHours(2), created.version()));
+        boot();
+        clock.advance(Duration.ofHours(1));
+        pass();
+        assertThat(transactions().claim(oldId, now())).isEmpty();
+        verifyNoInteractions(sender);
+        clock.advance(Duration.ofHours(1));
+        pass();
+        pass();
+        var current = reminderRows().findById(created.id()).orElseThrow().getCurrentDeliveryId();
+        verify(sender, times(1)).sendSms(current, "+12035550100", "TextLoop Reminder:\nFuture corrected");
+        verify(sender, never()).sendSms(eq(oldId), anyString(), anyString());
+    }
+
+    @ParameterizedTest
+    @EnumSource(SmsSubmissionResult.Outcome.class)
+    void claimedAttemptRejectsMutationsAndStillRecordsItsOutcome(SmsSubmissionResult.Outcome outcome) throws Exception {
+        Delivery delivery = create("Claimed snapshot");
+        var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        var enteredSender = new CountDownLatch(1);
+        var finishSender = new CountDownLatch(1);
+        when(sender.sendSms(eq(delivery.getId()), anyString(), anyString())).thenAnswer(invocation -> {
+            enteredSender.countDown();
+            assertThat(finishSender.await(10, TimeUnit.SECONDS)).isTrue();
+            return new SmsSubmissionResult(outcome, null);
+        });
+        var sending = CompletableFuture.runAsync(this::pass);
+        try {
+            assertThat(enteredSender.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(reload(delivery.getId()).getState()).isEqualTo(DeliveryState.UNKNOWN);
+            var before = storedRows();
+            assertThatThrownBy(() -> reminders().editReminder(reminder.getId(), new EditReminderRequest(
+                    "Too late", now().plusHours(1), reminder.getVersion())))
+                    .isInstanceOf(ReminderMutationException.class);
+            assertThatThrownBy(() -> reminders().withdrawReminder(reminder.getId(), reminder.getVersion()))
+                    .isInstanceOf(ReminderMutationException.class);
+            assertThat(storedRows()).isEqualTo(before);
+        } finally {
+            finishSender.countDown();
+        }
+        sending.get(10, TimeUnit.SECONDS);
+        assertThat(reload(delivery.getId()).getState().name()).isEqualTo(outcome.name());
+        assertThat(reminderStatus(delivery)).isEqualTo(outcome == SmsSubmissionResult.Outcome.ACCEPTED
+                ? ReminderStatus.SENT : ReminderStatus.PENDING);
+        verify(sender, times(1)).sendSms(delivery.getId(), "+12035550100", delivery.getMessage());
+    }
+
+    @Test
+    void heldOutcomesAndConsumedExtraPermissionCannotBeResetByOrdinaryMutations() {
+        Delivery delivery = create("Preserve budget");
+        when(sender.sendSms(any(), anyString(), anyString())).thenReturn(SmsSubmissionResult.retryableRejection());
+        pass();
+        assertMutationsRefusedWithoutChanges(delivery);
+        clock.advance(Duration.ofMinutes(1));
+        pass();
+        clock.advance(Duration.ofMinutes(5));
+        pass();
+        assertMutationsRefusedWithoutChanges(delivery);
+        transactions().recover(delivery.getId(), reload(delivery.getId()).getVersion(), RecoveryAction.RETRY_ONCE, false);
+        pass();
+        assertThat(reload(delivery.getId()).getAttemptCount()).isEqualTo(4);
+        assertThat(reload(delivery.getId()).isExtraAttemptPermitted()).isFalse();
+        assertMutationsRefusedWithoutChanges(delivery);
+        boot();
+        pass();
+        verify(sender, times(4)).sendSms(eq(delivery.getId()), anyString(), anyString());
+        Delivery permanent = create("Permanent");
+        when(sender.sendSms(eq(permanent.getId()), anyString(), anyString())).thenReturn(SmsSubmissionResult.permanentRejection());
+        pass();
+        assertMutationsRefusedWithoutChanges(permanent);
+        Delivery unknown = create("Uncertain");
+        transactions().claim(unknown.getId(), now());
+        boot();
+        assertMutationsRefusedWithoutChanges(unknown);
+    }
+
+    private void assertMutationsRefusedWithoutChanges(Delivery delivery) {
+        var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        var before = storedRows();
+        assertThatThrownBy(() -> reminders().editReminder(reminder.getId(), new EditReminderRequest(
+                "Cannot reset", now().plusHours(1), reminder.getVersion())))
+                .isInstanceOf(ReminderMutationException.class);
+        assertThatThrownBy(() -> reminders().withdrawReminder(reminder.getId(), reminder.getVersion()))
+                .isInstanceOf(ReminderMutationException.class);
+        assertThat(storedRows()).isEqualTo(before);
+    }
+
+    private List<?> storedRows() {
+        return List.of(jdbc().queryForList("select * from reminders order by id"),
+                jdbc().queryForList("select * from deliveries order by id"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void failedMutationCommitRollsBackEveryChange(boolean withdraw) {
+        Delivery delivery = create("Atomic correction");
+        var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        var before = storedRows();
+        failCommit("reminders", withdraw ? "NEW.withdrawn_at is not null" : "NEW.message = 'Corrected'");
+        assertThatThrownBy(() -> {
+            if (withdraw) reminders().withdrawReminder(reminder.getId(), reminder.getVersion());
+            else reminders().editReminder(reminder.getId(), new EditReminderRequest(
+                    "Corrected", now().plusHours(1), reminder.getVersion()));
+        }).isInstanceOf(RuntimeException.class);
+        assertThat(storedRows()).isEqualTo(before);
+        removeCommitFailure("reminders");
+        boot();
+        pass();
+        verify(sender, times(1)).sendSms(delivery.getId(), "+12035550100", delivery.getMessage());
+    }
+
+    @Test
+    void futureValidationUsesClockAfterWaitingForReminderLock() throws Exception {
+        Delivery delivery = create("Wait for lock");
+        var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        LocalDateTime proposedTime = now().plusMinutes(1);
+        var before = storedRows();
+        var transaction = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
+        CompletableFuture<?> mutation = transaction.execute(status -> {
+            reminderRows().findLockedById(reminder.getId()).orElseThrow();
+            var editing = CompletableFuture.runAsync(() -> reminders().editReminder(reminder.getId(),
+                    new EditReminderRequest("Expired while waiting", proposedTime, reminder.getVersion())));
+            await().atMost(Duration.ofSeconds(5)).until(() -> jdbc().queryForObject(
+                    "select count(*) from pg_stat_activity where wait_event_type = 'Lock' and datname = current_database()",
+                    Integer.class) > 0);
+            clock.advance(Duration.ofMinutes(1));
+            return editing;
+        });
+        assertThatThrownBy(() -> mutation.get(10, TimeUnit.SECONDS))
+                .hasCauseInstanceOf(ReminderMutationException.class);
+        assertThat(storedRows()).isEqualTo(before);
+        assertThatThrownBy(() -> reminders().editReminder(reminder.getId(), new EditReminderRequest(
+                "Present time", now(), reminder.getVersion()))).isInstanceOf(ReminderMutationException.class);
+        assertThat(storedRows()).isEqualTo(before);
+    }
+
+    @Test
+    void populatedPreMutationSchemaUpgradesWithoutRewritingHistoricalSnapshots() throws Exception {
+        Delivery delivery = create("Historic payload");
+        String historic = "TextLoop Reminder:\nHistoric payload\n\nReply DONE, SNOOZE, or CANCEL.";
+        jdbc().update("update deliveries set message = ? where id = ?", historic, delivery.getId());
+        transactions().claim(delivery.getId(), now());
+        var beforeDeliveries = jdbc().queryForList("select * from deliveries order by id");
+        context.close();
+        context = null;
+        try (var connection = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+                var statement = connection.createStatement()) {
+            statement.execute("alter table reminders drop column version, drop column withdrawn_at");
+        }
+        boot();
+        assertThat(jdbc().queryForList("select * from deliveries order by id")).isEqualTo(beforeDeliveries);
+        var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        assertThat(reminder.getVersion()).isZero();
+        assertThat(reminder.getWithdrawnAt()).isNull();
+        assertMutationsRefusedWithoutChanges(delivery);
+        UUID replacement = transactions().recover(delivery.getId(), reload(delivery.getId()).getVersion(),
+                RecoveryAction.REPLACE_UNKNOWN, true);
+        assertThat(reload(replacement).getMessage()).isEqualTo(historic);
+        pass();
+        verify(sender).sendSms(replacement, "+12035550100", historic);
     }
 
     @Test
