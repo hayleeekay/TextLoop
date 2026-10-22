@@ -12,6 +12,7 @@ hosted API.
 | [Create a reminder](#create-a-reminder) | `POST /api/reminders` | `201 Created` |
 | [Edit a reminder](#edit-a-reminder) | `PUT /api/reminders/{id}` | `200 OK` |
 | [Withdraw a reminder](#withdraw-a-reminder) | `POST /api/reminders/{id}/withdraw` | `200 OK` |
+| [Remind me again](#remind-me-again) | `POST /api/reminders/{id}/remind-again` | `200 OK` |
 | [Retrieve reminders](#retrieve-reminders) | `GET /api/reminders` | `200 OK` |
 | [Simulate an inbound reply](#simulate-an-inbound-reply) | `POST /api/inbound-replies` | `204 No Content` |
 | [Check health](#check-health) | `GET /health` | `200 OK` |
@@ -174,6 +175,59 @@ that omits the rejected identifier. Other refusals also return a fixed JSON code
 | `409` | `NOT_EDITABLE` | The current alert is no longer eligible for ordinary edits or withdrawal. |
 
 For example: `{"code":"STALE_VERSION"}`. Refused mutations leave stored state unchanged.
+
+## Remind me again
+
+`POST /api/reminders/{id}/remind-again`
+
+Schedule one fresh reminder with the source's message and phone number, preserving
+the source and its delivery evidence. Saving sends no confirmation text. Browsing
+reminders or prefilling a form schedules nothing.
+
+```json
+{
+  "operationId": "2af941dd-3fb2-4f75-a673-50b398ca468c",
+  "expectedVersion": 2,
+  "scheduledAt": "2030-01-15T14:30:00"
+}
+```
+
+All fields are required. `operationId` is a client-generated UUID for one save;
+retain it across retries. `expectedVersion` is the source's current nonnegative
+integer version. Supply an explicit new server-local time. Fractional seconds are
+truncated to microseconds before comparison and storage; that stored time must be
+strictly future after the database locks are acquired.
+
+| Source | Reuse allowed? |
+| --- | --- |
+| `SENT`, including legacy records without a delivery | Yes, with current acceptance recorded when a delivery exists. |
+| Current delivery `ACCEPTED`, awaiting `SENT` finalization | Yes. Finalization cannot submit again. |
+| Withdrawn, never-claimed `READY` alert | Yes. The source stays withdrawn. |
+| Unwithdrawn `PENDING` with current `PERMANENT_REJECTION` | Yes. The old delivery cannot retry. |
+| Active `READY` alert, including overdue alerts | No. Edit or withdraw it first. |
+| `UNKNOWN` | No. Use [delivery review](delivery-recovery.md). |
+| Any `RETRYABLE_REJECTION`, including exhausted retries | No. Use delivery recovery; another attempt may remain or be granted. |
+| Untracked `PENDING` or inconsistent delivery state | No. |
+
+Success returns `200 OK` with a new reminder in the usual response format. Its
+fresh delivery uses the normal retry policy. The source's snapshots and budget stay
+unchanged. The new reminder can be edited or withdrawn using the existing endpoints.
+
+A successful save durably binds the source ID and operation UUID to the requested
+version, canonical time, and result. Repeating that request returns the same result's
+current representation, including later edits, withdrawal, or sending. Replay still
+works after restart, source finalization, or the requested time passing; it creates
+nothing. Reusing that source/key with a different version or canonical time returns
+`409 OPERATION_CONFLICT`. A new UUID deliberately schedules a separate alert. UUIDs
+are scoped to each source, and successful bindings do not expire.
+
+Malformed or missing fields return the existing generic `400`; malformed path IDs
+return `400 INVALID_ID`. New operations can also return `404 NOT_FOUND`,
+`400 INVALID_SCHEDULE`, `409 STALE_VERSION`, `409 NOT_REUSABLE`, or
+`409 DELIVERY_REVIEW_REQUIRED`. These use the fixed `{"code":"..."}` format.
+Validation and conflict failures save nothing. Persistence failures return
+`503 SAVE_FAILED` without database details. Retry the unchanged operation UUID and
+payload to resolve whether a save committed when its response was lost.
 
 ## What happens next
 

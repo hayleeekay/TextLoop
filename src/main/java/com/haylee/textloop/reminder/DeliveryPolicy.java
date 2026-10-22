@@ -12,6 +12,19 @@ final class DeliveryPolicy {
         return delivery.getState() == DeliveryState.READY && delivery.getAttemptCount() == 0;
     }
 
+    static boolean reusable(Delivery delivery) {
+        Reminder reminder = delivery.getReminder();
+        if (!delivery.getId().equals(reminder.getCurrentDeliveryId())) {
+            return false;
+        }
+        if (reminder.getWithdrawnAt() != null) {
+            return reminder.getStatus() == ReminderStatus.PENDING && editable(delivery);
+        }
+        return delivery.getState() == DeliveryState.ACCEPTED
+                || (reminder.getStatus() == ReminderStatus.PENDING
+                    && delivery.getState() == DeliveryState.PERMANENT_REJECTION);
+    }
+
     static boolean eligible(Delivery delivery, LocalDateTime now) {
         if (delivery.getState() == DeliveryState.READY) {
             return true;
