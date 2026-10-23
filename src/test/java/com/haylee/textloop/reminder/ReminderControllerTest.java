@@ -33,6 +33,9 @@ class ReminderControllerTest {
     @MockitoBean
     private ReminderService reminderService;
 
+    @MockitoBean
+    private ReminderReadService reminderReadService;
+
     @ParameterizedTest
     @ValueSource(ints = {0, 30})
     void createsReminder(int second) throws Exception {

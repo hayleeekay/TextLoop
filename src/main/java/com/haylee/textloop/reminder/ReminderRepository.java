@@ -11,6 +11,12 @@ import org.springframework.data.jpa.repository.Query;
 import jakarta.persistence.LockModeType;
 
 public interface ReminderRepository extends JpaRepository<Reminder, Long> {
+    List<Reminder> findByStatusAndWithdrawnAtIsNullAndScheduledAtGreaterThanOrderByScheduledAtAscIdAsc(
+            ReminderStatus status, LocalDateTime cutoff);
+
+    List<Reminder> findByScheduledAtGreaterThanAndScheduledAtLessThanEqualOrderByScheduledAtDescIdDesc(
+            LocalDateTime start, LocalDateTime end);
+
     List<Reminder> findByStatusAndWithdrawnAtIsNullAndScheduledAtLessThanEqual(
             ReminderStatus status,
             LocalDateTime scheduledAt);

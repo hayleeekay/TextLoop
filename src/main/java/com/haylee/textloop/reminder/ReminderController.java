@@ -23,6 +23,7 @@ import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
 import com.haylee.textloop.reminder.dto.RemindAgainRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
+import com.haylee.textloop.reminder.dto.ReminderViewResponse;
 import com.haylee.textloop.reminder.dto.WithdrawReminderRequest;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -32,9 +33,11 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/reminders")
 public class ReminderController {
     private final ReminderService reminderService;
+    private final ReminderReadService reminderReadService;
 
-    public ReminderController(ReminderService reminderService) {
+    public ReminderController(ReminderService reminderService, ReminderReadService reminderReadService) {
         this.reminderService = reminderService;
+        this.reminderReadService = reminderReadService;
     }
 
     @PostMapping
@@ -47,6 +50,21 @@ public class ReminderController {
     @GetMapping
     public List<ReminderResponse> getReminders() {
         return reminderService.getReminders();
+    }
+
+    @GetMapping("/upcoming")
+    public List<ReminderViewResponse> upcoming() {
+        return reminderReadService.upcoming();
+    }
+
+    @GetMapping("/recent")
+    public List<ReminderViewResponse> recent() {
+        return reminderReadService.recent();
+    }
+
+    @GetMapping("/{id}")
+    public ReminderViewResponse detail(@PathVariable Long id) {
+        return reminderReadService.detail(id);
     }
 
     @PutMapping("/{id}")
