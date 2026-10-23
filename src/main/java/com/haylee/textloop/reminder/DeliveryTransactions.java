@@ -2,6 +2,7 @@ package com.haylee.textloop.reminder;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
+import com.haylee.textloop.reminder.dto.RemindAgainRequest;
 import com.haylee.textloop.sms.SmsSubmissionResult;
 
 /** Short committed units of work. The sender is deliberately absent from these transactions. */
@@ -20,18 +22,65 @@ import com.haylee.textloop.sms.SmsSubmissionResult;
 public class DeliveryTransactions {
     private final ReminderRepository reminders;
     private final DeliveryRepository deliveries;
+    private final ReminderReuseRepository reuses;
     private final Clock clock;
 
-    public DeliveryTransactions(ReminderRepository reminders, DeliveryRepository deliveries, Clock clock) {
+    public DeliveryTransactions(ReminderRepository reminders, DeliveryRepository deliveries,
+            ReminderReuseRepository reuses, Clock clock) {
         this.reminders = reminders;
         this.deliveries = deliveries;
+        this.reuses = reuses;
         this.clock = clock;
     }
 
     public Reminder createReminder(CreateReminderRequest request) {
+        return persistReminder(request);
+    }
+
+    private Reminder persistReminder(CreateReminderRequest request) {
         Reminder reminder = reminders.save(new Reminder(request.message(), request.phoneNumber(), request.scheduledAt()));
         attachDelivery(reminder, false);
         return reminder;
+    }
+
+    public Reminder remindAgain(Long id, RemindAgainRequest request) {
+        Reminder source = reminders.findLockedById(id)
+                .orElseThrow(() -> new ReminderMutationException(ReminderMutationException.Reason.NOT_FOUND));
+        LocalDateTime scheduledAt = request.scheduledAt().truncatedTo(ChronoUnit.MICROS);
+        var previous = reuses.findBySourceReminderIdAndOperationId(id, request.operationId());
+        if (previous.isPresent()) {
+            // Replay resolves an already committed save, even after its time or source version changes.
+            if (!previous.get().matches(request.expectedVersion(), scheduledAt)) {
+                throw new ReminderMutationException(ReminderMutationException.Reason.OPERATION_CONFLICT);
+            }
+            return previous.get().getResultReminder();
+        }
+        if (source.getVersion() != request.expectedVersion()) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.STALE_VERSION);
+        }
+        if (source.getCurrentDeliveryId() == null) {
+            if (source.getStatus() != ReminderStatus.SENT || source.getWithdrawnAt() != null) {
+                throw new ReminderMutationException(ReminderMutationException.Reason.NOT_REUSABLE);
+            }
+        } else {
+            Delivery delivery = deliveries.findLockedById(source.getCurrentDeliveryId())
+                    .orElseThrow(() -> new ReminderMutationException(ReminderMutationException.Reason.NOT_REUSABLE));
+            if (!delivery.getReminder().getId().equals(source.getId())) {
+                throw new ReminderMutationException(ReminderMutationException.Reason.NOT_REUSABLE);
+            }
+            if (delivery.getState() == DeliveryState.UNKNOWN) {
+                throw new ReminderMutationException(ReminderMutationException.Reason.DELIVERY_REVIEW_REQUIRED);
+            }
+            if (!DeliveryPolicy.reusable(delivery)) {
+                throw new ReminderMutationException(ReminderMutationException.Reason.NOT_REUSABLE);
+            }
+        }
+        if (!scheduledAt.isAfter(now())) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.INVALID_SCHEDULE);
+        }
+        Reminder result = persistReminder(new CreateReminderRequest(source.getMessage(), scheduledAt, source.getPhoneNumber()));
+        reuses.save(new ReminderReuse(source, request.operationId(), request.expectedVersion(), scheduledAt, result));
+        return result;
     }
 
     public Reminder editReminder(Long id, EditReminderRequest request) {

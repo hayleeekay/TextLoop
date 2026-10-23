@@ -7,12 +7,15 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
+import com.haylee.textloop.reminder.dto.RemindAgainRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
 import com.haylee.textloop.sms.SmsService;
 import com.haylee.textloop.sms.SmsSubmissionResult;
@@ -35,6 +38,15 @@ public class ReminderService {
 
     public ReminderResponse createReminder(CreateReminderRequest request) {
         return toResponse(deliveries.createReminder(request));
+    }
+
+    public ReminderResponse remindAgain(Long id, RemindAgainRequest request) {
+        try {
+            return toResponse(deliveries.remindAgain(id, request));
+        } catch (DataAccessException | TransactionException failure) {
+            // The transaction proxy has finished, including commit. Do not expose driver payloads.
+            throw new ReminderMutationException(ReminderMutationException.Reason.SAVE_FAILED);
+        }
     }
 
     public ReminderResponse editReminder(Long id, EditReminderRequest request) {

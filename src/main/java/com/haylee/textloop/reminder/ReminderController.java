@@ -21,6 +21,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
+import com.haylee.textloop.reminder.dto.RemindAgainRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
 import com.haylee.textloop.reminder.dto.WithdrawReminderRequest;
 
@@ -58,12 +59,18 @@ public class ReminderController {
         return reminderService.withdrawReminder(id, request.expectedVersion());
     }
 
+    @PostMapping("/{id}/remind-again")
+    public ReminderResponse remindAgain(@PathVariable Long id, @Valid @RequestBody RemindAgainRequest request) {
+        return reminderService.remindAgain(id, request);
+    }
+
     @ExceptionHandler(ReminderMutationException.class)
     public ResponseEntity<Map<String, String>> refusedMutation(ReminderMutationException failure) {
         HttpStatus status = switch (failure.getReason()) {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
             case INVALID_SCHEDULE -> HttpStatus.BAD_REQUEST;
-            case STALE_VERSION, NOT_EDITABLE -> HttpStatus.CONFLICT;
+            case STALE_VERSION, NOT_EDITABLE, NOT_REUSABLE, DELIVERY_REVIEW_REQUIRED, OPERATION_CONFLICT -> HttpStatus.CONFLICT;
+            case SAVE_FAILED -> HttpStatus.SERVICE_UNAVAILABLE;
         };
         return ResponseEntity.status(status).body(Map.of("code", failure.getReason().name()));
     }
