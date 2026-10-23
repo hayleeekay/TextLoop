@@ -331,6 +331,47 @@ To observe background processing, retrieve the list again after a reminder becom
 due. Its status changes to `SENT` after sender acceptance is recorded and finalized.
 For reminders that remain `PENDING`, see [Retries and recovery](#retries-and-recovery).
 
+### Upcoming, Recent, and detail
+
+- `GET /api/reminders/upcoming`: unwithdrawn `PENDING` reminders scheduled strictly
+  after the current server-local time, ordered by scheduled time then ID, ascending.
+- `GET /api/reminders/recent`: reminders scheduled within the last seven days,
+  ordered by scheduled time then ID, descending. The lower boundary is exclusive;
+  the current time is inclusive. Withdrawn and held/failed reminders are included.
+- `GET /api/reminders/{id}`: one stored reminder, including outside either window.
+  Missing records return `404 NOT_FOUND`; malformed IDs return `400 INVALID_ID`,
+  using the fixed JSON code format above.
+
+Recent uses `scheduledAt`, so a reminder created months ago and due yesterday is
+included. Retries do not create separate rows or move the window. Comparisons use
+stored microsecond precision and one clock reading per collection request.
+
+These responses contain the usual reminder fields plus `canEdit`, `canWithdraw`,
+`canRemindAgain`, `feedback`, and nullable `nextAttemptAt`. Collection responses use
+arrays, including `[]` when empty. Feedback describes the current alert:
+
+| `feedback` | Meaning |
+| --- | --- |
+| `WAITING` | Submission has not begun. A past scheduled time does not mean it sent. |
+| `ACCEPTED` | Sender acceptance is recorded, possibly awaiting `SENT` finalization. This does not confirm handset delivery. |
+| `WITHDRAWN` | The never-claimed alert was withdrawn. |
+| `RETRY_WAITING` | Another attempt is permitted. `nextAttemptAt` is its earliest eligible time, not a promised send time. |
+| `RETRY_EXHAUSTED` | The retry budget is used. Review delivery recovery before another attempt. |
+| `PERMANENT_REJECTION` | The sender rejected the submission. Remind me again can schedule a fresh alert. |
+| `DELIVERY_UNCERTAIN` | Submission outcome is unresolved. Use delivery review before scheduling again. |
+| `LEGACY_SENT` | A legacy record is marked `SENT` without a delivery record. Acceptance evidence is unavailable. |
+| `UNTRACKED` / `INCONSISTENT_DELIVERY` | Delivery information is missing or inconsistent. Ordinary actions are unavailable. |
+
+Action flags describe the read snapshot; saves recheck eligibility under locks and
+may conflict. Use the returned `version` for edits, withdrawal, or a new reuse
+operation. A previously successful reuse operation can still be replayed even when
+`canRemindAgain` is now false. `nextAttemptAt` is null when no retry is permitted.
+
+Browsing, detail, and refresh create no deliveries, invoke no sending or legacy
+adoption, and change no statuses. Leaving a window preserves records and delivery
+evidence. Older records remain discoverable through the unfiltered list and detail.
+These reads have the same local, unauthenticated scope as the existing list.
+
 ## Simulate an inbound reply
 
 `POST /api/inbound-replies`
