@@ -26,11 +26,12 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer;
+import org.springframework.boot.hibernate.autoconfigure.HibernatePropertiesCustomizer;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
@@ -41,6 +42,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import tools.jackson.databind.JsonNode;
 import com.haylee.textloop.PostgreSQLTestConfiguration;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
@@ -52,6 +54,7 @@ import com.haylee.textloop.reminder.dto.WithdrawReminderRequest;
 import com.haylee.textloop.sms.SmsService;
 import com.haylee.textloop.sms.SmsSubmissionResult;
 
+@AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @Import({PostgreSQLTestConfiguration.class, ReminderViewsIntegrationTest.Fixtures.class})
 class ReminderViewsIntegrationTest {
@@ -98,19 +101,19 @@ class ReminderViewsIntegrationTest {
         return List.of(jdbc.queryForList("select * from reminders where id = ?", id),
                 jdbc.queryForList("select * from deliveries where reminder_id = ? order by id", id));
     }
-    private ResponseEntity<ReminderResponse> edit(ReminderViewResponse source) {
+    private ResponseEntity<JsonNode> edit(ReminderViewResponse source) {
         return http.exchange(BASE + "/" + source.id(), HttpMethod.PUT,
                 new HttpEntity<>(new EditReminderRequest("Corrected message", now().plusDays(2), source.version())),
-                ReminderResponse.class);
+                JsonNode.class);
     }
-    private ResponseEntity<ReminderResponse> withdraw(Long id, long version) {
-        return http.postForEntity(BASE + "/" + id + "/withdraw", new WithdrawReminderRequest(version), ReminderResponse.class);
+    private ResponseEntity<JsonNode> withdraw(Long id, long version) {
+        return http.postForEntity(BASE + "/" + id + "/withdraw", new WithdrawReminderRequest(version), JsonNode.class);
     }
     private RemindAgainRequest reuseRequest(ReminderViewResponse source) {
         return new RemindAgainRequest(UUID.randomUUID(), source.version(), now().plusDays(1));
     }
-    private ResponseEntity<ReminderResponse> reuse(Long id, RemindAgainRequest request) {
-        return http.postForEntity(BASE + "/" + id + "/remind-again", request, ReminderResponse.class);
+    private ResponseEntity<JsonNode> reuse(Long id, RemindAgainRequest request) {
+        return http.postForEntity(BASE + "/" + id + "/remind-again", request, JsonNode.class);
     }
 
     @Test
@@ -265,7 +268,7 @@ class ReminderViewsIntegrationTest {
             var response = reuse(source.getId(), reuseRequest(result));
             assertThat(response.getStatusCode()).isEqualTo(reusable ? HttpStatus.OK : HttpStatus.CONFLICT);
             if (reusable) {
-                assertThat(view("upcoming")).extracting(ReminderViewResponse::id).containsExactly(response.getBody().id());
+                assertThat(view("upcoming")).extracting(ReminderViewResponse::id).containsExactly(response.getBody().path("id").asLong());
                 assertThat(view("recent")).containsExactly(result);
             }
             if (!editable) {
@@ -328,7 +331,7 @@ class ReminderViewsIntegrationTest {
         var edited = edit(initial);
         assertThat(edited.getStatusCode()).isEqualTo(HttpStatus.OK);
         ReminderViewResponse corrected = detail(id);
-        assertThat(corrected.version()).isEqualTo(edited.getBody().version()).isGreaterThan(initial.version());
+        assertThat(corrected.version()).isEqualTo(edited.getBody().path("version").asLong()).isGreaterThan(initial.version());
         assertThat(corrected.message()).isEqualTo("Corrected message");
         assertThat(view("upcoming")).containsExactly(corrected);
         assertThat(edit(initial).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
@@ -339,14 +342,14 @@ class ReminderViewsIntegrationTest {
         var request = reuseRequest(withdrawn);
         var reused = reuse(id, request);
         assertThat(reused.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(view("upcoming")).extracting(ReminderViewResponse::id).containsExactly(reused.getBody().id());
+        assertThat(view("upcoming")).extracting(ReminderViewResponse::id).containsExactly(reused.getBody().path("id").asLong());
         assertThat(reuse(id, request).getBody()).isEqualTo(reused.getBody());
         assertThat(sourceRows(id)).isEqualTo(original);
         assertThat(deliveries.count()).isEqualTo(3);
         assertThat(jdbc.queryForList("select message from deliveries where reminder_id = ? order by created_at, message", String.class, id))
                 .containsExactlyInAnyOrder("TextLoop Reminder:\nInitial message", "TextLoop Reminder:\nCorrected message");
         clock.advance(Duration.ofDays(3));
-        assertThat(view("recent")).extracting(ReminderViewResponse::id).containsExactly(id, reused.getBody().id());
+        assertThat(view("recent")).extracting(ReminderViewResponse::id).containsExactly(id, reused.getBody().path("id").asLong());
         assertThat(view("upcoming")).isEmpty();
         verifyNoInteractions(sender);
     }

@@ -39,8 +39,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.web.context.WebServerApplicationContext;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
@@ -56,7 +56,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.haylee.textloop.LoggingStateExtension;
 import com.haylee.textloop.TextloopApplication;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
@@ -521,7 +521,7 @@ class ReminderReuseIntegrationTest {
         } else {
             assertThat(transactions().claim(source.getCurrentDeliveryId(), now())).isEmpty();
             var refreshed = reload(source);
-            assertThat(save(refreshed, request(refreshed)).getStatusCode())
+            assertThat(raw(refreshed.getId(), request(refreshed)).getStatusCode())
                     .isEqualTo(action.equals("withdraw") ? HttpStatus.OK : HttpStatus.CONFLICT);
         }
         verifyNoInteractions(sender);

@@ -4,7 +4,7 @@ import java.util.Map;
 
 import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
 import org.springframework.boot.context.logging.LoggingApplicationListener;
-import org.springframework.boot.env.EnvironmentPostProcessorApplicationListener;
+import org.springframework.boot.support.EnvironmentPostProcessorApplicationListener;
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.context.ApplicationListener;
