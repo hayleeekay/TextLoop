@@ -6,10 +6,17 @@ import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.TransactionSystemException;
 
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
+import com.haylee.textloop.reminder.dto.EditReminderRequest;
+import com.haylee.textloop.reminder.dto.RemindAgainRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
 import com.haylee.textloop.sms.SmsService;
 import com.haylee.textloop.sms.SmsSubmissionResult;
@@ -52,6 +59,63 @@ class ReminderServiceTest {
         Assertions.assertEquals(ReminderStatus.PENDING, response.status());
 
         Mockito.verify(deliveries).createReminder(request);
+    }
+
+    enum Mutation { CREATE, EDIT, WITHDRAW, REUSE }
+
+    private Executable failingMutation(Mutation mutation, RuntimeException failure) {
+        LocalDateTime future = LocalDateTime.now().plusDays(1);
+        return switch (mutation) {
+            case CREATE -> {
+                var request = new CreateReminderRequest("Take a walk", future, "+12035550100");
+                Mockito.doThrow(failure).when(deliveries).createReminder(request);
+                yield () -> reminderService.createReminder(request);
+            }
+            case EDIT -> {
+                var request = new EditReminderRequest("Corrected", future, 1L);
+                Mockito.doThrow(failure).when(deliveries).editReminder(1L, request);
+                yield () -> reminderService.editReminder(1L, request);
+            }
+            case WITHDRAW -> {
+                Mockito.doThrow(failure).when(deliveries).withdrawReminder(1L, 1L);
+                yield () -> reminderService.withdrawReminder(1L, 1L);
+            }
+            case REUSE -> {
+                var request = new RemindAgainRequest(UUID.randomUUID(), 1L, future);
+                Mockito.doThrow(failure).when(deliveries).remindAgain(1L, request);
+                yield () -> reminderService.remindAgain(1L, request);
+            }
+        };
+    }
+
+    @ParameterizedTest
+    @EnumSource(Mutation.class)
+    void persistenceFailuresBecomeCauseFreeSaveFailures(Mutation mutation) {
+        for (RuntimeException failure : List.of(
+                new DataIntegrityViolationException("private-driver-marker", new RuntimeException("private-cause-marker")),
+                new TransactionSystemException("private-commit-marker", new RuntimeException("private-cause-marker")))) {
+            var safe = Assertions.assertThrows(ReminderMutationException.class, failingMutation(mutation, failure));
+            Assertions.assertEquals(ReminderMutationException.Reason.SAVE_FAILED, safe.getReason());
+            Assertions.assertNull(safe.getCause());
+            Assertions.assertNull(safe.getMessage());
+            Assertions.assertEquals(0, safe.getSuppressed().length);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Mutation.class)
+    void unrelatedProgrammingFailuresPropagateUnchanged(Mutation mutation) {
+        var failure = new IllegalStateException("Unexpected programming failure");
+        Assertions.assertSame(failure, Assertions.assertThrows(IllegalStateException.class,
+                failingMutation(mutation, failure)));
+    }
+
+    @ParameterizedTest
+    @EnumSource(Mutation.class)
+    void businessRefusalsPropagateUnchanged(Mutation mutation) {
+        var refusal = new ReminderMutationException(ReminderMutationException.Reason.STALE_VERSION);
+        Assertions.assertSame(refusal, Assertions.assertThrows(ReminderMutationException.class,
+                failingMutation(mutation, refusal)));
     }
 
     @Test

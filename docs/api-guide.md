@@ -99,6 +99,10 @@ Validation errors return generic JSON containing the status, error name, and
 request path. They do not include field-specific validation messages or rejected
 values. Use the request-field table to check the input.
 
+Persistence failures return `503 {"code":"SAVE_FAILED"}` without database details.
+The save may have committed even when its acknowledgement failed. Retrieve reminders
+before deciding whether to create another; creation does not deduplicate retries.
+
 ## Edit a reminder
 
 `PUT /api/reminders/{id}`
@@ -173,8 +177,11 @@ that omits the rejected identifier. Other refusals also return a fixed JSON code
 | `404` | `NOT_FOUND` | The reminder does not exist. |
 | `409` | `STALE_VERSION` | The reminder version changed. Retrieve it again before deciding what to do. |
 | `409` | `NOT_EDITABLE` | The current alert is no longer eligible for ordinary edits or withdrawal. |
+| `503` | `SAVE_FAILED` | The database operation failed or its commit could not be confirmed. |
 
-For example: `{"code":"STALE_VERSION"}`. Refused mutations leave stored state unchanged.
+For example: `{"code":"STALE_VERSION"}`. Validation and conflict refusals leave stored
+state unchanged. A `503 SAVE_FAILED` can occur after a successful commit. Retrieve
+the current reminder and version before deciding whether another correction is needed.
 
 ## Remind me again
 

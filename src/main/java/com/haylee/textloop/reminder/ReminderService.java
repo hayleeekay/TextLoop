@@ -37,7 +37,11 @@ public class ReminderService {
     }
 
     public ReminderResponse createReminder(CreateReminderRequest request) {
-        return toResponse(deliveries.createReminder(request));
+        try {
+            return toResponse(deliveries.createReminder(request));
+        } catch (DataAccessException | TransactionException failure) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.SAVE_FAILED);
+        }
     }
 
     public ReminderResponse remindAgain(Long id, RemindAgainRequest request) {
@@ -50,11 +54,19 @@ public class ReminderService {
     }
 
     public ReminderResponse editReminder(Long id, EditReminderRequest request) {
-        return toResponse(deliveries.editReminder(id, request));
+        try {
+            return toResponse(deliveries.editReminder(id, request));
+        } catch (DataAccessException | TransactionException failure) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.SAVE_FAILED);
+        }
     }
 
     public ReminderResponse withdrawReminder(Long id, long expectedVersion) {
-        return toResponse(deliveries.withdrawReminder(id, expectedVersion));
+        try {
+            return toResponse(deliveries.withdrawReminder(id, expectedVersion));
+        } catch (DataAccessException | TransactionException failure) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.SAVE_FAILED);
+        }
     }
 
     public List<ReminderResponse> getReminders() {

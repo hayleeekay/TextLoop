@@ -255,6 +255,23 @@ class ReminderMutationIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
+    void mismatchedDeliveryOwnershipRefusesMutationWithoutChangingEitherReminder(boolean withdraw) {
+        ReminderResponse requested = create();
+        ReminderResponse other = create();
+        var otherDelivery = reminders.findById(other.id()).orElseThrow().getCurrentDeliveryId();
+        // This inconsistency requires direct database corruption, outside supported operations.
+        jdbc.update("update reminders set current_delivery_id = ? where id = ?", otherDelivery, requested.id());
+        var before = storedRows();
+
+        var response = mutate(requested.id(), withdraw, request(requested, withdraw));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isEqualTo("{\"code\":\"NOT_EDITABLE\"}");
+        assertThat(storedRows()).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void competingHttpMutationsWithOneVersionHaveOneWinner(boolean secondWithdraws) throws Exception {
         ReminderResponse created = create();
         var start = new CountDownLatch(1);

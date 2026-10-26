@@ -116,7 +116,8 @@ public class DeliveryTransactions {
         }
         Delivery delivery = deliveries.findLockedById(reminder.getCurrentDeliveryId())
                 .orElseThrow(() -> new ReminderMutationException(ReminderMutationException.Reason.NOT_EDITABLE));
-        if (!currentPending(delivery) || !DeliveryPolicy.editable(delivery)) {
+        if (!delivery.getReminder().getId().equals(reminder.getId())
+                || !currentPending(delivery) || !DeliveryPolicy.editable(delivery)) {
             throw new ReminderMutationException(ReminderMutationException.Reason.NOT_EDITABLE);
         }
         return delivery;
