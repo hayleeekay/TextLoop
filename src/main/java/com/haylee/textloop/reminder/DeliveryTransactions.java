@@ -34,11 +34,13 @@ public class DeliveryTransactions {
     }
 
     public Reminder createReminder(CreateReminderRequest request) {
-        return persistReminder(request);
+        LocalDateTime scheduledAt = canonicalSchedule(request.scheduledAt());
+        requireFutureSchedule(scheduledAt);
+        return persistReminder(request.message(), request.phoneNumber(), scheduledAt);
     }
 
-    private Reminder persistReminder(CreateReminderRequest request) {
-        Reminder reminder = reminders.save(new Reminder(request.message(), request.phoneNumber(), request.scheduledAt()));
+    private Reminder persistReminder(String message, String phoneNumber, LocalDateTime scheduledAt) {
+        Reminder reminder = reminders.save(new Reminder(message, phoneNumber, scheduledAt));
         attachDelivery(reminder, false);
         return reminder;
     }
@@ -46,7 +48,7 @@ public class DeliveryTransactions {
     public Reminder remindAgain(Long id, RemindAgainRequest request) {
         Reminder source = reminders.findLockedById(id)
                 .orElseThrow(() -> new ReminderMutationException(ReminderMutationException.Reason.NOT_FOUND));
-        LocalDateTime scheduledAt = request.scheduledAt().truncatedTo(ChronoUnit.MICROS);
+        LocalDateTime scheduledAt = canonicalSchedule(request.scheduledAt());
         var previous = reuses.findBySourceReminderIdAndOperationId(id, request.operationId());
         if (previous.isPresent()) {
             // Replay resolves an already committed save, even after its time or source version changes.
@@ -75,22 +77,19 @@ public class DeliveryTransactions {
                 throw new ReminderMutationException(ReminderMutationException.Reason.NOT_REUSABLE);
             }
         }
-        if (!scheduledAt.isAfter(now())) {
-            throw new ReminderMutationException(ReminderMutationException.Reason.INVALID_SCHEDULE);
-        }
-        Reminder result = persistReminder(new CreateReminderRequest(source.getMessage(), scheduledAt, source.getPhoneNumber()));
+        requireFutureSchedule(scheduledAt);
+        Reminder result = persistReminder(source.getMessage(), source.getPhoneNumber(), scheduledAt);
         reuses.save(new ReminderReuse(source, request.operationId(), request.expectedVersion(), scheduledAt, result));
         return result;
     }
 
     public Reminder editReminder(Long id, EditReminderRequest request) {
         Delivery previous = lockEditable(id, request.expectedVersion());
-        if (!request.scheduledAt().isAfter(now())) {
-            throw new ReminderMutationException(ReminderMutationException.Reason.INVALID_SCHEDULE);
-        }
+        LocalDateTime scheduledAt = canonicalSchedule(request.scheduledAt());
+        requireFutureSchedule(scheduledAt);
         Reminder reminder = previous.getReminder();
         reminder.setMessage(request.message());
-        reminder.setScheduledAt(request.scheduledAt());
+        reminder.setScheduledAt(scheduledAt);
         Delivery replacement = new Delivery(reminder, now(), false);
         replacement.linkPrevious(previous);
         deliveries.save(replacement);
@@ -243,6 +242,17 @@ public class DeliveryTransactions {
                     DeliveryReason.PERMANENT_NON_ACCEPTANCE, null, null, now);
             case UNKNOWN -> delivery.recordOutcome(DeliveryState.UNKNOWN, DeliveryReason.SUBMISSION_UNCONFIRMED,
                     null, null, now);
+        }
+    }
+
+    private LocalDateTime canonicalSchedule(LocalDateTime requested) {
+        return requested.truncatedTo(ChronoUnit.MICROS);
+    }
+
+    private void requireFutureSchedule(LocalDateTime scheduledAt) {
+        // Compare the value that will be stored against the full validation clock.
+        if (!scheduledAt.isAfter(now())) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.INVALID_SCHEDULE);
         }
     }
 
