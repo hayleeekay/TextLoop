@@ -25,7 +25,8 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
@@ -44,6 +45,7 @@ import com.haylee.textloop.reminder.dto.ReminderResponse;
 import com.haylee.textloop.reminder.dto.WithdrawReminderRequest;
 import com.haylee.textloop.sms.SmsSubmissionResult;
 
+@AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @Import({PostgreSQLTestConfiguration.class, ReminderMutationIntegrationTest.PreciseClock.class})
 @ExtendWith(OutputCaptureExtension.class)

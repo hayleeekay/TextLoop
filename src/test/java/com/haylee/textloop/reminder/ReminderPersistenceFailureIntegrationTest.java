@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -28,12 +29,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.web.context.WebServerApplicationContext;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpEntity;
@@ -44,7 +45,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DelegatingDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import com.zaxxer.hikari.HikariDataSource;
 import com.haylee.textloop.LoggingStateExtension;
 import com.haylee.textloop.TextloopApplication;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
@@ -175,6 +177,31 @@ class ReminderPersistenceFailureIntegrationTest {
     }
 
     @ParameterizedTest
+    @EnumSource(value = Mutation.class, names = {"EDIT", "WITHDRAW", "REUSE"})
+    void lockTimeoutReturnsSafeFailureWithoutChangingRows(Mutation mutation, CapturedOutput output) throws Exception {
+        Reminder source = source(mutation);
+        UUID operationId = UUID.randomUUID();
+        var before = rows();
+        try (Connection blocker = DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
+            blocker.setAutoCommit(false);
+            try {
+                try (var statement = blocker.prepareStatement("select id from reminders where id = ? for update")) {
+                    statement.setLong(1, source.getId());
+                    try (var locked = statement.executeQuery()) {
+                        assertThat(locked.next()).isTrue();
+                    }
+                }
+                assertSafeFailure(mutate(mutation, source, operationId), output);
+                assertThat(rows()).isEqualTo(before);
+            } finally {
+                blocker.rollback();
+            }
+        }
+        assertThat(mutate(mutation, source, operationId).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @ParameterizedTest
     @EnumSource(Mutation.class)
     void lostCommitAcknowledgementReturnsSafeFailureButKeepsTheWholeMutation(
             Mutation mutation, CapturedOutput output) throws Exception {
@@ -283,7 +310,9 @@ class ReminderPersistenceFailureIntegrationTest {
     static class Fixtures {
         @Bean SmsService smsService() { return sender; }
         @Bean CommitFaultDataSource dataSource(DataSourceProperties properties) {
-            return new CommitFaultDataSource(properties.initializeDataSourceBuilder().build());
+            var target = properties.initializeDataSourceBuilder().type(HikariDataSource.class).build();
+            target.setConnectionInitSql("set lock_timeout = '100ms'");
+            return new CommitFaultDataSource(target);
         }
     }
 
