@@ -160,8 +160,15 @@ class ReminderReuseIntegrationTest {
             legacy.setStatus(ReminderStatus.SENT);
             return reminders().save(legacy);
         }
-        var created = service().createReminder(new CreateReminderRequest(MESSAGE,
-                now().minusMinutes(1).truncatedTo(ChronoUnit.MICROS), PHONE));
+        LocalDateTime due = now().minusMinutes(1).truncatedTo(ChronoUnit.MICROS);
+        var present = clock.instant;
+        clock.instant = present.minus(Duration.ofMinutes(2));
+        ReminderResponse created;
+        try {
+            created = service().createReminder(new CreateReminderRequest(MESSAGE, due, PHONE));
+        } finally {
+            clock.instant = present;
+        }
         var source = reminders().findById(created.id()).orElseThrow();
         var id = source.getCurrentDeliveryId();
         if (state == Source.WITHDRAWN) {
@@ -225,6 +232,25 @@ class ReminderReuseIntegrationTest {
         verifyNoInteractions(sender);
     }
 
+    @Test
+    void legacySourcePayloadIsCopiedWithoutApplyingNewRequestConstraints() {
+        var source = source(Source.LEGACY_SENT);
+        String legacyPhone = "😀".repeat(200);
+        jdbc().update("update reminders set message = ?, phone_number = ? where id = ?", "  ", legacyPhone, source.getId());
+        var before = sourceRows(source);
+        var request = request(source);
+        var result = save(source, request).getBody();
+        assertThat(result.message()).isEqualTo("  ");
+        assertThat(result.phoneNumber()).isEqualTo(legacyPhone);
+        assertThat(sourceRows(source)).isEqualTo(before);
+        clock.advance(Duration.ofDays(2));
+        boot();
+        before = rows();
+        assertThat(save(source, request).getBody()).isEqualTo(result);
+        assertThat(rows()).isEqualTo(before);
+        verifyNoInteractions(sender);
+    }
+
     @ParameterizedTest
     @EnumSource(value = Source.class, names = {"READY", "UNKNOWN", "RETRYABLE", "EXHAUSTED", "EXTRA"})
     void blocksSourcesWhoseDeliveryIsActiveUncertainOrRecoverable(Source state) {
@@ -281,6 +307,9 @@ class ReminderReuseIntegrationTest {
         var request = request(source);
         var result = save(source, request).getBody();
         var before = rows();
+        String withSuffix = context.getBean(ObjectMapper.class).writeValueAsString(request)
+                .replace(request.scheduledAt().toString(), request.scheduledAt() + "Z");
+        assertThat(raw(source.getId(), withSuffix).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertError(raw(source.getId(), new RemindAgainRequest(request.operationId(), request.expectedVersion() + 1,
                 request.scheduledAt())), HttpStatus.CONFLICT, "OPERATION_CONFLICT");
         assertError(raw(source.getId(), new RemindAgainRequest(request.operationId(), request.expectedVersion(),
@@ -383,7 +412,9 @@ class ReminderReuseIntegrationTest {
         boot();
         clearInvocations(sender);
         var before = rows();
-        assertThat(save(source, request).getBody()).isEqualTo(expected);
+        var equivalent = new RemindAgainRequest(request.operationId(), request.expectedVersion(),
+                request.scheduledAt().plusNanos(1));
+        assertThat(save(source, equivalent).getBody()).isEqualTo(expected);
         assertThat(rows()).isEqualTo(before);
         assertError(raw(source.getId(), new RemindAgainRequest(UUID.randomUUID(), request.expectedVersion(),
                 now().plusDays(1))), HttpStatus.CONFLICT, "STALE_VERSION");
