@@ -79,8 +79,14 @@ class ReminderViewsIntegrationTest {
 
     private LocalDateTime now() { return LocalDateTime.now(clock); }
     private Reminder source(LocalDateTime due) {
-        var response = service.createReminder(new CreateReminderRequest("View test message", due, PHONE));
-        return reminders.findById(response.id()).orElseThrow();
+        var present = clock.instant;
+        clock.instant = due.minusDays(1).toInstant(ZoneOffset.UTC);
+        try {
+            var response = service.createReminder(new CreateReminderRequest("View test message", due, PHONE));
+            return reminders.findById(response.id()).orElseThrow();
+        } finally {
+            clock.instant = present;
+        }
     }
     private ReminderViewResponse detail(Long id) {
         var response = http.getForEntity(BASE + "/" + id, ReminderViewResponse.class);

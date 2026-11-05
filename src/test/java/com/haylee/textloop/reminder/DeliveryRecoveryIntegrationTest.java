@@ -143,8 +143,14 @@ class DeliveryRecoveryIntegrationTest {
     private void pass() { reminders().processDueReminders(now()); }
 
     private Delivery create(String message) {
-        var response = reminders().createReminder(new CreateReminderRequest(message, now().minusMinutes(1), "+12035550100"));
-        return deliveryRows().findById(reminderRows().findById(response.id()).orElseThrow().getCurrentDeliveryId()).orElseThrow();
+        LocalDateTime due = now().minusMinutes(1);
+        clock.advance(Duration.ofMinutes(-2));
+        try {
+            var response = reminders().createReminder(new CreateReminderRequest(message, due, "+12035550100"));
+            return deliveryRows().findById(reminderRows().findById(response.id()).orElseThrow().getCurrentDeliveryId()).orElseThrow();
+        } finally {
+            clock.advance(Duration.ofMinutes(2));
+        }
     }
 
     private Delivery reload(UUID id) { return deliveryRows().findById(id).orElseThrow(); }

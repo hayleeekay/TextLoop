@@ -114,7 +114,7 @@ class ReminderControllerTest {
     }
 
     @Test
-    void rejectsPastScheduledTime() throws Exception {
+    void returnsInvalidScheduleFromService() throws Exception {
         String requestBody = """
                 {
                   "message": "Take a walk",
@@ -123,7 +123,12 @@ class ReminderControllerTest {
                 }
                 """;
 
-        assertBadRequest(requestBody);
+        Mockito.when(reminderService.createReminder(Mockito.any(CreateReminderRequest.class)))
+                .thenThrow(new ReminderMutationException(ReminderMutationException.Reason.INVALID_SCHEDULE));
+
+        mockMvc.perform(post("/api/reminders").contentType(MediaType.APPLICATION_JSON).content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SCHEDULE"));
     }
 
     @Test

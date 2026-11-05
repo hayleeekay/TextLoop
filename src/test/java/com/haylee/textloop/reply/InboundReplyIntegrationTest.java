@@ -52,6 +52,7 @@ class InboundReplyIntegrationTest {
             "DONE!, NO_CONTENT",
             "SCHEDULE, NO_CONTENT",
             "an arbitrary reply, NO_CONTENT",
+            "head\0tail, NO_CONTENT",
             "' ', BAD_REQUEST"
     })
     void requestsLeavePersistedRemindersUnchanged(String body, HttpStatus expectedStatus) {

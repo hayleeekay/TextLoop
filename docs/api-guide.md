@@ -31,7 +31,7 @@ later through the scheduler.
 
 All fields are required and cannot be `null`. `message` and `phoneNumber` must be
 nonblank, meaning they contain something other than whitespace. Accepted strings
-are stored unchanged.
+are stored unchanged. Embedded NUL characters (`U+0000`) are rejected.
 
 String-length limits use UTF-16 code units, matching Java's `String.length()`.
 Most common letters count as one unit. Emojis like 😀 count as two units.
@@ -40,7 +40,7 @@ Most common letters count as one unit. Emojis like 😀 count as two units.
 | --- | --- | --- |
 | `message` | string | Maximum 1,000 UTF-16 code units. This is an input-size limit, not an SMS segment limit. |
 | `phoneNumber` | string | Maximum 255 UTF-16 code units. Phone-number format is not validated or normalized. |
-| `scheduledAt` | string (date-time) | Local ISO format, such as `2030-01-15T14:30:00`, without a timezone or offset. Must be strictly after the server's current local time when validated. No caller-timezone conversion. |
+| `scheduledAt` | string (date-time) | Local ISO format, such as `2030-01-15T14:30:00`, without a timezone or offset. Fractional seconds are truncated to microseconds. The stored value must be strictly after the server's full current local time when validated. Timezone suffixes and offsets are rejected; no caller-timezone conversion. |
 
 ### Example request
 
@@ -89,14 +89,15 @@ is stored separately in `deliveries` and is not exposed in the HTTP response.
 
 `400 Bad Request`
 
-Missing or null required fields, blank strings, oversized strings, and present or
-past scheduled times are rejected without saving a reminder.
+Missing or null required fields, blank strings, oversized strings, embedded NUL,
+and invalid date formats are rejected without saving a reminder. A time that is not
+strictly future after microsecond truncation returns `400 {"code":"INVALID_SCHEDULE"}`.
 
 For example, setting `scheduledAt` to `"2000-01-01T10:00:00"` produces a `400`.
 Replace it with a future server-local time and resubmit.
 
-Validation errors return generic JSON containing the status, error name, and
-request path. They do not include field-specific validation messages or rejected
+Field and date-format validation errors return generic JSON containing the status,
+error name, and request path. They do not include field-specific validation messages or rejected
 values. Use the request-field table to check the input.
 
 Persistence failures return `503 {"code":"SAVE_FAILED"}` without database details.
@@ -122,9 +123,9 @@ curl -i --request PUT http://localhost:8080/api/reminders/42 \
   }'
 ```
 
-`message` uses the creation constraints. The new time must be strictly after the
-server's current local time after it obtains the database locks. `expectedVersion`
-must be a nonnegative integer. Accepted message text is stored unchanged.
+`message` uses the creation constraints. The local-only time is truncated to
+microseconds and must be strictly after the server's full current local time after
+it obtains the database locks. `expectedVersion` must be a nonnegative integer. Accepted message text is stored unchanged.
 
 Success returns `200 OK` with the same fields as the create response and an updated
 version. The correction saves a new delivery snapshot and prevents the obsolete
@@ -203,7 +204,8 @@ All fields are required. `operationId` is a client-generated UUID for one save;
 retain it across retries. `expectedVersion` is the source's current nonnegative
 integer version. Supply an explicit new server-local time. Fractional seconds are
 truncated to microseconds before comparison and storage; that stored time must be
-strictly future after the database locks are acquired.
+strictly after the full current clock after the database locks are acquired.
+Timezone suffixes and offsets are rejected, as with creation and editing.
 
 | Source | Reuse allowed? |
 | --- | --- |
