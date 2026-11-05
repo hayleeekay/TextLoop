@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TextLoop</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>TextLoop</h1>
+    <p>Schedule a reminder text. No reply needed.</p>
+    <p class="hint">Local testing with simulated sending. No real SMS is sent. Times use the server's timezone; use this on the same device.</p>
+    <div class="actions">
+      <button id="new-reminder" type="button">New reminder</button>
+      <button id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+  <p id="notice" role="status" aria-live="polite"></p>
+  <section id="saved-retry" hidden aria-label="Unconfirmed save"></section>
+  <section aria-labelledby="editor-title">
+    <h2 id="editor-title" tabindex="-1">New reminder</h2>
+    <form id="reminder-form">
+      <fieldset id="fields" disabled>
+        <legend class="sr-only">Reminder details</legend>
+        <label for="message">Message</label>
+        <textarea id="message" name="message" maxlength="1000" rows="4" required></textarea>
+        <label for="phone">Phone number</label>
+        <input id="phone" name="phone" type="tel" maxlength="255" required>
+        <label for="scheduled-at">Date and time</label>
+        <input id="scheduled-at" name="scheduledAt" type="datetime-local" step="60" required aria-describedby="time-help">
+        <p id="time-help" class="hint">Choose a future time.</p>
+        <button id="save" type="submit">Save reminder</button>
+      </fieldset>
+    </form>
+    <div id="form-feedback" role="status" aria-live="polite"></div>
+    <div id="detail" hidden></div>
+  </section>
+  <section id="lists" aria-label="Saved reminders" tabindex="-1">
+    <section aria-labelledby="upcoming-title">
+      <h2 id="upcoming-title">Upcoming</h2>
+      <div id="upcoming" aria-live="polite"></div>
+    </section>
+    <section aria-labelledby="recent-title">
+      <h2 id="recent-title">Recent</h2>
+      <p class="hint">Scheduled within the last seven days. Leaving this view does not delete a reminder.</p>
+      <div id="recent" aria-live="polite"></div>
+    </section>
+  </section>
+  <noscript><p>Enable JavaScript to use the reminder forms and lists.</p></noscript>
+</main>
+</body>
+</html>

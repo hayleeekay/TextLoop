@@ -123,6 +123,25 @@ class ReminderViewsIntegrationTest {
     }
 
     @Test
+    void localPageAndAssetsLeaveRemindersAndDeliveriesUnchanged() {
+        source(now().plusDays(1));
+        var before = rows();
+        for (var asset : List.of(new String[] {"/", "text/html"},
+                new String[] {"/app.css", "text/css"}, new String[] {"/app.js", "javascript"})) {
+            var response = http.getForEntity(asset[0], String.class);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(response.getHeaders().getContentType().toString()).contains(asset[1]);
+            assertThat(response.getBody()).isNotBlank();
+        }
+        var upcoming = http.getForEntity(BASE + "/upcoming", JsonNode.class);
+        assertThat(upcoming.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(upcoming.getHeaders().getContentType().toString()).contains("application/json");
+        assertThat(upcoming.getBody().isArray()).isTrue();
+        assertThat(rows()).isEqualTo(before);
+        verifyNoInteractions(sender);
+    }
+
+    @Test
     void emptyCollectionsAndFixedDetailErrors() {
         assertThat(view("upcoming")).isEmpty();
         assertThat(view("recent")).isEmpty();
