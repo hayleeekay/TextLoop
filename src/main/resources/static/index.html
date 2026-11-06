@@ -8,21 +8,28 @@
   <script src="/app.js" defer></script>
 </head>
 <body>
+<header>
+  <div class="header-inner">
+    <p class="brand">Text<span>Loop</span></p>
+    <nav aria-label="Reminders">
+      <button id="home" type="button" aria-pressed="true" data-navigation>Home</button>
+      <button id="history-tab" type="button" aria-pressed="false" data-navigation>History</button>
+    </nav>
+    <button id="refresh" type="button" class="quiet">Refresh</button>
+  </div>
+</header>
 <main>
-  <header>
-    <h1>TextLoop</h1>
-    <p>Schedule a reminder text. No reply needed.</p>
-    <p class="hint">Local testing with simulated sending. No real SMS is sent. Times use the server's timezone; use this on the same device.</p>
-    <div class="actions">
-      <button id="new-reminder" type="button">New reminder</button>
-      <button id="refresh" type="button">Refresh</button>
-    </div>
-  </header>
   <p id="notice" role="status" aria-live="polite"></p>
   <section id="saved-retry" hidden aria-label="Unconfirmed save"></section>
-  <section aria-labelledby="editor-title">
-    <h2 id="editor-title" tabindex="-1">New reminder</h2>
-    <form id="reminder-form">
+  <section id="editor" hidden aria-labelledby="editor-title">
+    <button id="back" type="button" class="quiet back">Back to reminders</button>
+    <div class="heading">
+      <div>
+        <h1 id="editor-title" tabindex="-1">New reminder</h1>
+        <p id="editor-help" class="hint">What would you like to remember?</p>
+      </div>
+    </div>
+    <form id="reminder-form" class="panel">
       <fieldset id="fields" disabled>
         <legend class="sr-only">Reminder details</legend>
         <label for="message">Message</label>
@@ -32,24 +39,34 @@
         <label for="scheduled-at">Date and time</label>
         <input id="scheduled-at" name="scheduledAt" type="datetime-local" step="60" required aria-describedby="time-help">
         <p id="time-help" class="hint">Choose a future time.</p>
-        <button id="save" type="submit">Save reminder</button>
+        <div class="actions form-actions">
+          <button id="save" type="submit" class="primary">Schedule reminder</button>
+          <button id="cancel" type="button">Cancel</button>
+        </div>
       </fieldset>
     </form>
-    <div id="form-feedback" role="status" aria-live="polite"></div>
-    <div id="detail" hidden></div>
   </section>
-  <section id="lists" aria-label="Saved reminders" tabindex="-1">
-    <section aria-labelledby="upcoming-title">
-      <h2 id="upcoming-title">Upcoming</h2>
-      <div id="upcoming" aria-live="polite"></div>
-    </section>
-    <section aria-labelledby="recent-title">
-      <h2 id="recent-title">Recent</h2>
-      <p class="hint">Scheduled within the last seven days. Leaving this view does not delete a reminder.</p>
-      <div id="recent" aria-live="polite"></div>
-    </section>
+  <div id="form-feedback" role="status" aria-live="polite"></div>
+  <section id="detail" hidden aria-label="Current saved version"></section>
+  <section id="browse" aria-labelledby="view-title">
+    <div class="heading">
+      <div>
+        <h1 id="view-title" tabindex="-1">Upcoming</h1>
+        <p id="view-help" class="hint">Your next reminder texts.</p>
+      </div>
+      <button id="new-reminder" type="button" class="primary">+ New reminder</button>
+    </div>
+    <div id="upcoming" aria-live="polite"></div>
+    <div id="history" hidden aria-live="polite"></div>
   </section>
-  <noscript><p>Enable JavaScript to use the reminder forms and lists.</p></noscript>
+  <footer>
+    <p>Local preview. No real texts are sent.</p>
+    <details>
+      <summary>About this version</summary>
+      <p>Sending is simulated. Sender acceptance does not confirm delivery to a phone. Times follow the server's local timezone; use this version on the same computer.</p>
+    </details>
+  </footer>
+  <noscript><p>Enable JavaScript to use TextLoop.</p></noscript>
 </main>
 </body>
 </html>

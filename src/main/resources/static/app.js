@@ -4,7 +4,8 @@ const $ = (id) => document.getElementById(id);
 const form = $('reminder-form');
 const feedback = $('form-feedback');
 const retryKey = 'textloop.pendingReuse';
-let mode = 'create';
+let mode = 'view';
+let activeView = 'upcoming';
 let selected = null;
 let originalMessageDisplay = '';
 let dirty = false;
@@ -13,7 +14,7 @@ let needsReview = false;
 let uncertainCreate = false;
 let checkedCreate = false;
 let detailRead = 0;
-const listReads = { upcoming: 0, recent: 0 };
+const listReads = { upcoming: 0, history: 0 };
 let pendingReuse = null;
 let retryStorageBlocked = false;
 
@@ -34,6 +35,14 @@ function button(text, action) {
 function notice(text) { $('notice').textContent = text; }
 function localTime(value) { return value.replace('T', ' '); }
 function newSchedule(value) { return value.length === 16 ? value + ':00' : value; }
+
+function displayTime(value) {
+  // Format the stored wall-clock fields without applying a timezone offset.
+  const date = new Date(value + 'Z');
+  return Number.isNaN(date.getTime()) ? localTime(value)
+    : new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }).format(date);
+}
 
 function deliveryText(reminder) {
   switch (reminder.feedback) {
@@ -78,15 +87,17 @@ function isReminder(value) {
 function controls() {
   $('fields').disabled = saving || uncertainCreate || (mode === 'reuse' && pendingReuse !== null);
   $('save').disabled = saving || needsReview || (mode === 'reuse' && (pendingReuse !== null || retryStorageBlocked));
-  $('new-reminder').disabled = saving;
-  document.querySelectorAll('[data-selection]').forEach((item) => { item.disabled = saving; });
+  $('new-reminder').disabled = saving || uncertainCreate;
+  $('back').disabled = saving;
+  document.querySelectorAll('[data-navigation]').forEach((item) => { item.disabled = saving; });
+  document.querySelectorAll('[data-selection]').forEach((item) => { item.disabled = saving || uncertainCreate; });
   $('saved-retry').querySelectorAll('button').forEach((item) => { item.disabled = saving; });
 }
 
 function canLeave() {
   if (saving) return false;
   if (uncertainCreate) {
-    notice('This save might have succeeded. Check Upcoming and Recent, then choose Start again after checking.');
+    notice('This save might have succeeded. Check Home and History, then choose Start again after checking.');
     return false;
   }
   return !dirty || window.confirm('Discard the unsaved changes in this form?');
@@ -102,9 +113,13 @@ function showForm(nextMode, reminder = null, reviewed = false) {
   needsReview = false;
   feedback.replaceChildren();
   $('detail').hidden = true;
+  $('browse').hidden = true;
+  $('editor').hidden = false;
   form.hidden = false;
   $('editor-title').textContent = nextMode === 'create' ? 'New reminder'
     : nextMode === 'edit' ? 'Edit reminder' : 'Remind me again';
+  $('editor-help').textContent = nextMode === 'reuse' ? 'Same message. Choose a new time.'
+    : nextMode === 'edit' ? 'Make a change before this alert sends.' : 'What would you like to remember?';
   $('message').value = reminder?.message ?? '';
   originalMessageDisplay = $('message').value;
   $('phone').value = reminder?.phoneNumber ?? '';
@@ -114,9 +129,31 @@ function showForm(nextMode, reminder = null, reviewed = false) {
   $('time-help').textContent = nextMode === 'edit'
     ? 'Current time: ' + localTime(reminder.scheduledAt) + '. Leave the time unchanged to keep it exactly, or choose a new future time.'
     : nextMode === 'reuse' ? 'Same message and phone number. Choose a new future time.' : 'Choose a future time.';
-  $('save').textContent = nextMode === 'edit' ? 'Save changes' : nextMode === 'reuse' ? 'Schedule again' : 'Save reminder';
+  $('save').textContent = nextMode === 'edit' ? 'Save changes' : nextMode === 'reuse' ? 'Schedule again' : 'Schedule reminder';
   controls();
   $('editor-title').focus();
+}
+
+function showBrowse(name = activeView, saved = false) {
+  if (saving || (!uncertainCreate && !saved && !canLeave())) return false;
+  ++detailRead;
+  activeView = name;
+  if (!uncertainCreate) {
+    mode = 'view'; selected = null; dirty = false; needsReview = false;
+    form.hidden = true; feedback.replaceChildren(); $('detail').hidden = true;
+  }
+  $('editor').hidden = true;
+  $('browse').hidden = false;
+  $('upcoming').hidden = name !== 'upcoming';
+  $('history').hidden = name !== 'history';
+  $('home').setAttribute('aria-pressed', name === 'upcoming');
+  $('history-tab').setAttribute('aria-pressed', name === 'history');
+  $('view-title').textContent = name === 'upcoming' ? 'Upcoming' : 'History';
+  $('view-help').textContent = name === 'upcoming' ? 'Your next reminder texts.' : 'Past and withdrawn reminders, ready when you need them again.';
+  if (!saved) notice('');
+  controls();
+  $('view-title').focus();
+  return true;
 }
 
 function summary(reminder, container) {
@@ -128,67 +165,100 @@ function summary(reminder, container) {
 
 function renderDetail(reminder) {
   const detail = $('detail');
-  detail.replaceChildren(node('h3', 'Saved reminder'));
+  detail.replaceChildren(node('h2', 'Current saved version'));
   summary(reminder, detail);
-  const actions = node('div', undefined, 'actions');
-  if (!uncertainCreate && reminder.canEdit) actions.append(button('Edit', () => openAction('edit', reminder.id)));
-  if (!uncertainCreate && reminder.canWithdraw) actions.append(button('Withdraw', async () => {
-    if (!canLeave() || !window.confirm('Withdraw this alert so it will not send?')) return;
-    selected = reminder;
-    await mutate('withdraw', reminder.id, { expectedVersion: reminder.version });
-  }));
-  if (!uncertainCreate && reminder.canRemindAgain) actions.append(button('Remind me again', () => openAction('reuse', reminder.id)));
-  for (const action of actions.children) action.dataset.selection = '';
-  detail.append(actions);
   detail.hidden = false;
-  controls();
 }
 
 async function openAction(nextMode, id) {
   if (!canLeave()) return;
+  if (needsReview && selected?.id === id) {
+    notice('Review the current reminder before making another change.');
+    return;
+  }
   const read = ++detailRead;
   notice('Loading reminder...');
   try {
     const reminder = await request('/' + id);
     if (read !== detailRead) return;
-    if (nextMode === 'edit' ? reminder.canEdit : reminder.canRemindAgain) {
-      showForm(nextMode, reminder, true);
+    const allowed = nextMode === 'edit' ? reminder.canEdit
+      : nextMode === 'reuse' ? reminder.canRemindAgain : reminder.canWithdraw;
+    if (!allowed) {
+      notice('This alert is no longer available for that change. Refreshing its saved details.');
+      await refreshLists();
+    } else if (nextMode === 'withdraw') {
       notice('');
+      if (!window.confirm('Withdraw this alert so it will not send?')) return;
+      selected = reminder;
+      await mutate('withdraw', reminder.id, { expectedVersion: reminder.version });
     } else {
-      renderDetail(reminder);
-      notice('This alert is no longer available for that change. Current details are shown below.');
+      showForm(nextMode, reminder, true);
     }
   } catch {
     if (read === detailRead) notice('Could not refresh this reminder. Try again before making a change.');
   }
 }
 
-async function openDetail(id, review = false) {
-  const keepDraft = review || uncertainCreate;
-  if (saving || (!keepDraft && !canLeave())) return;
+async function reviewCurrentReminder() {
+  if (saving || !selected) return;
+  const id = selected.id;
+  const keepDraft = !$('editor').hidden && !form.hidden;
   const read = ++detailRead;
   notice('Loading reminder...');
   try {
     const reminder = await request('/' + id);
     if (read !== detailRead) return;
     if (!keepDraft) {
-      mode = 'view'; selected = reminder; dirty = false; needsReview = false;
-      form.hidden = true; feedback.replaceChildren();
-      $('editor-title').textContent = 'Reminder';
+      mode = 'review'; form.hidden = true;
+      $('browse').hidden = true; $('editor').hidden = false;
+      $('editor-title').textContent = 'Review reminder';
+      $('editor-help').textContent = 'Check the saved details before starting another change.';
     }
     renderDetail(reminder);
-    notice(keepDraft ? (form.hidden ? 'Current saved details are shown below. Review them before making another change.'
-      : 'Saved details are shown below your draft. Review them before starting again.') : '');
+    notice(keepDraft ? 'Saved details are shown below your draft. Review them before starting again.' : 'Current saved details are shown below.');
     if (keepDraft) $('detail').scrollIntoView({ block: 'nearest' });
     else $('editor-title').focus();
   } catch (failure) {
-    if (read === detailRead) notice(failure.status === 404 ? 'This reminder is no longer available.' : 'Could not load this reminder. Try View again.');
+    if (read === detailRead) notice(failure.status === 404 ? 'This reminder is no longer available.' : 'Could not load the saved reminder. Try Review current reminder again.');
   }
+}
+
+function renderCard(reminder, name, expanded) {
+  const row = node('li', undefined, 'reminder-card');
+  row.append(node('h2', reminder.message, 'message'));
+  const labels = { WAITING: name === 'upcoming' ? 'Scheduled' : 'Waiting to send',
+    ACCEPTED: 'Sent (simulated)', WITHDRAWN: 'Withdrawn', RETRY_WAITING: 'Retry scheduled',
+    RETRY_EXHAUSTED: 'Sending stopped', PERMANENT_REJECTION: 'Not sent',
+    DELIVERY_UNCERTAIN: 'Needs review', LEGACY_SENT: 'Previously sent',
+    UNTRACKED: 'Needs review', INCONSISTENT_DELIVERY: 'Needs review' };
+  const attention = ['RETRY_WAITING', 'RETRY_EXHAUSTED', 'PERMANENT_REJECTION',
+    'DELIVERY_UNCERTAIN', 'UNTRACKED', 'INCONSISTENT_DELIVERY'].includes(reminder.feedback);
+  const meta = node('div', undefined, 'meta');
+  meta.append(node('span', 'Scheduled for ' + displayTime(reminder.scheduledAt)),
+    node('span', labels[reminder.feedback] ?? 'Refresh details', attention ? 'badge attention' : 'badge'));
+  row.append(meta);
+  if (attention) row.append(node('p', deliveryText(reminder), 'attention-text'));
+  const actions = node('div', undefined, 'actions');
+  if (reminder.canEdit) actions.append(button('Edit', () => openAction('edit', reminder.id)));
+  if (reminder.canWithdraw) actions.append(button('Withdraw', () => openAction('withdraw', reminder.id)));
+  if (reminder.canRemindAgain) actions.append(button('Remind me again', () => openAction('reuse', reminder.id)));
+  for (const action of actions.children) action.dataset.selection = '';
+  if (actions.children.length) row.append(actions);
+  const details = node('details');
+  details.dataset.reminderId = String(reminder.id);
+  details.open = expanded.has(String(reminder.id));
+  details.append(node('summary', 'View details'));
+  const body = node('div', undefined, 'saved-details');
+  body.append(node('p', 'To: ' + reminder.phoneNumber),
+    node('p', 'Scheduled: ' + localTime(reminder.scheduledAt)), node('p', deliveryText(reminder)));
+  details.append(body); row.append(details);
+  return row;
 }
 
 async function refreshList(name) {
   const read = ++listReads[name];
   const target = $(name);
+  const expanded = new Set([...target.querySelectorAll('details[open]')].map((item) => item.dataset.reminderId));
   target.replaceChildren(node('p', 'Loading...'));
   target.setAttribute('aria-busy', 'true');
   try {
@@ -198,14 +268,12 @@ async function refreshList(name) {
     const list = node('ul');
     for (const reminder of reminders) {
       if (!isReminder(reminder)) throw {};
-      const row = node('li');
-      summary(reminder, row);
-      const view = button('View', () => openDetail(reminder.id));
-      view.dataset.selection = '';
-      row.append(view);
-      list.append(row);
+      list.append(renderCard(reminder, name, expanded));
     }
-    target.replaceChildren(reminders.length ? list : node('p', name === 'upcoming' ? 'No upcoming reminders.' : 'No reminders scheduled in the last seven days.'));
+    const empty = node('div', undefined, 'empty');
+    empty.append(node('h2', name === 'upcoming' ? 'No upcoming reminders' : 'No previous reminders yet'),
+      node('p', name === 'upcoming' ? 'Schedule a text whenever you need a reminder.' : 'Past and withdrawn reminders will appear here.', 'hint'));
+    target.replaceChildren(reminders.length ? list : empty);
     controls();
     return true;
   } catch {
@@ -217,22 +285,38 @@ async function refreshList(name) {
 }
 
 async function refreshLists() {
-  const results = await Promise.all([refreshList('upcoming'), refreshList('recent')]);
-  if (uncertainCreate && results.every(Boolean)) {
+  const checking = uncertainCreate;
+  const results = await Promise.all([refreshList('upcoming'), refreshList('history')]);
+  if (checking && uncertainCreate && results.every(Boolean)) {
     checkedCreate = true;
     createUncertainty();
   }
+  return results.every(Boolean);
 }
 
 function createUncertainty() {
-  feedback.replaceChildren(node('p', 'The save might have succeeded. Check Upcoming and Recent before deciding to save another alert.'));
-  feedback.append(button('Check Upcoming and Recent', async () => {
+  feedback.replaceChildren(node('p', 'The save might have succeeded. Check Home and History before deciding to schedule another alert.'));
+  feedback.append(button('Check saved reminders', async () => {
+    showBrowse();
     await refreshLists();
-    $('lists').focus();
+    $('view-title').focus();
   }));
+  feedback.append(button('Return to draft', () => {
+    $('browse').hidden = true; $('editor').hidden = false;
+    $('editor-title').focus();
+  }));
+  const close = button('Close draft', () => {
+    if (!checkedCreate || !window.confirm('Close this unsaved draft? Any reminder already saved will stay scheduled.')) return;
+    uncertainCreate = false; checkedCreate = false; dirty = false;
+    showBrowse(activeView, true);
+    notice('Draft closed. Saved reminders are unchanged.');
+  });
+  close.disabled = !checkedCreate;
+  feedback.append(close);
   const restart = button('Start again after checking', () => {
     if (!checkedCreate || !window.confirm('The earlier save may already exist. Start again with this draft anyway?')) return;
     uncertainCreate = false; checkedCreate = false;
+    $('browse').hidden = true; $('editor').hidden = false;
     feedback.replaceChildren(node('p', 'Draft kept. Save only if you still need another alert.'));
     controls();
     $('save').focus();
@@ -243,7 +327,7 @@ function createUncertainty() {
 
 function reviewRequired(text) {
   needsReview = true;
-  feedback.replaceChildren(node('p', text), button('Review current reminder', () => openDetail(selected.id, true)));
+  feedback.replaceChildren(node('p', text), button('Review current reminder', reviewCurrentReminder));
   // Previously rendered actions also belong to an old snapshot.
   $('detail').hidden = true;
 }
@@ -257,13 +341,15 @@ function mutationError(kind, failure) {
   } else if (uncertain) {
     reviewRequired('The save might have succeeded. Review the current reminder before making another change.');
   } else if (failure.code === 'STALE_VERSION') {
-    reviewRequired('This reminder changed. Your draft is kept. Review current details before starting again.');
+    reviewRequired(!$('editor').hidden && !form.hidden
+      ? 'This reminder changed. Your draft is kept. Review current details before starting again.'
+      : 'This reminder changed. Review current details before starting again.');
   } else if (failure.code === 'NOT_EDITABLE' || failure.code === 'NOT_REUSABLE' || failure.code === 'DELIVERY_REVIEW_REQUIRED') {
     reviewRequired(failure.code === 'DELIVERY_REVIEW_REQUIRED'
       ? 'Sending could not be confirmed. Delivery review is needed before scheduling again.'
       : 'This alert is no longer available for that change. Review its current details.');
   } else if (failure.code === 'OPERATION_CONFLICT') {
-    feedback.replaceChildren(node('p', 'This saved retry does not match the earlier save. Check Upcoming and Recent before starting again.'));
+    feedback.replaceChildren(node('p', 'This saved retry does not match the earlier save. Check Home and History before starting again.'));
   } else {
     feedback.replaceChildren(node('p', failure.code === 'INVALID_SCHEDULE'
       ? 'Choose a time that is still in the future.'
@@ -330,7 +416,7 @@ function renderRetry() {
   if (panel.hidden) return;
   panel.append(node('p', pendingReuse
     ? 'A saved Remind me again request is available. Retry checks that same save, without creating a second alert if it already succeeded.'
-    : 'Saved retry information is unavailable. Check Upcoming and Recent before scheduling again.'));
+    : 'Saved retry information is unavailable. Check Home and History before scheduling again.'));
   const actions = node('div', undefined, 'actions');
   if (pendingReuse) {
     const retry = button('Retry this save', () => {
@@ -338,14 +424,14 @@ function renderRetry() {
       const { sourceId, ...body } = pendingReuse;
       mode = 'view'; selected = { id: sourceId }; dirty = false; needsReview = false;
       form.hidden = true; $('detail').hidden = true; feedback.replaceChildren();
-      $('editor-title').textContent = 'Remind me again';
+      $('editor').hidden = true; $('browse').hidden = false;
       mutate('reuse', sourceId, body);
     });
     retry.disabled = saving;
     actions.append(retry);
   }
   const clear = button('Clear saved retry', () => {
-    if (saving || !window.confirm('The earlier save might already exist. Check Upcoming and Recent before scheduling another alert. Stop keeping this retry?')) return;
+    if (saving || !window.confirm('The earlier save might already exist. Check Home and History before scheduling another alert. Stop keeping this retry?')) return;
     clearRetry(); controls();
   });
   clear.disabled = saving;
@@ -359,9 +445,8 @@ async function mutate(kind, id, body) {
   ++detailRead;
   controls();
   notice('Saving...');
-  let result;
   try {
-    result = await request(kind === 'create' ? '' : '/' + id + (kind === 'edit' ? '' : kind === 'reuse' ? '/remind-again' : '/withdraw'),
+    await request(kind === 'create' ? '' : '/' + id + (kind === 'edit' ? '' : kind === 'reuse' ? '/remind-again' : '/withdraw'),
       kind === 'edit' ? 'PUT' : 'POST', body);
   } catch (failure) {
     notice('');
@@ -374,20 +459,10 @@ async function mutate(kind, id, body) {
     controls();
   }
   if (kind === 'reuse') clearRetry();
-  mode = 'view'; selected = result; dirty = false; needsReview = false;
-  form.hidden = true; feedback.replaceChildren();
-  $('editor-title').textContent = 'Reminder';
-  renderDetail(result);
-  const savedText = kind === 'withdraw' ? 'Alert withdrawn.' : 'Reminder saved.';
+  dirty = false; needsReview = false;
+  showBrowse(kind === 'withdraw' ? 'history' : 'upcoming', true);
+  const savedText = kind === 'withdraw' ? 'Reminder withdrawn.' : kind === 'edit' ? 'Changes saved.' : 'Reminder scheduled.';
   notice(savedText);
-  $('editor-title').focus();
-  const read = ++detailRead;
-  try {
-    const detail = await request('/' + result.id);
-    if (read === detailRead) { selected = detail; renderDetail(detail); }
-  } catch {
-    if (read === detailRead) notice(savedText + ' Details could not refresh. Use View to check them.');
-  }
   await refreshLists();
 }
 
@@ -419,10 +494,11 @@ form.addEventListener('submit', async (event) => {
 });
 
 $('new-reminder').addEventListener('click', () => showForm('create'));
-$('refresh').addEventListener('click', () => {
-  refreshLists();
-  if (mode === 'view' && !needsReview && !$('detail').hidden) openDetail(selected.id);
-});
+for (const [id, name] of [['home', 'upcoming'], ['history-tab', 'history']]) {
+  $(id).addEventListener('click', () => { if (showBrowse(name)) refreshLists(); });
+}
+for (const id of ['back', 'cancel']) $(id).addEventListener('click', () => { if (showBrowse()) refreshLists(); });
+$('refresh').addEventListener('click', () => refreshLists());
 window.addEventListener('beforeunload', (event) => {
   if (saving || uncertainCreate || dirty) { event.preventDefault(); event.returnValue = ''; }
 });

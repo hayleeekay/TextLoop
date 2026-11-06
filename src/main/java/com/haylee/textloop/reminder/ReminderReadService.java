@@ -40,6 +40,10 @@ public class ReminderReadService {
                 end.minusDays(7), end));
     }
 
+    public List<ReminderViewResponse> history() {
+        return views(reminders.findHistory(cutoff()));
+    }
+
     public ReminderViewResponse detail(Long id) {
         Reminder reminder = reminders.findById(id)
                 .orElseThrow(() -> new ReminderMutationException(ReminderMutationException.Reason.NOT_FOUND));

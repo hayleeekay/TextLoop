@@ -62,6 +62,11 @@ public class ReminderController {
         return reminderReadService.recent();
     }
 
+    @GetMapping("/history")
+    public List<ReminderViewResponse> history() {
+        return reminderReadService.history();
+    }
+
     @GetMapping("/{id}")
     public ReminderViewResponse detail(@PathVariable Long id) {
         return reminderReadService.detail(id);

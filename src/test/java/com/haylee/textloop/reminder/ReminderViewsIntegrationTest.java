@@ -145,6 +145,7 @@ class ReminderViewsIntegrationTest {
     void emptyCollectionsAndFixedDetailErrors() {
         assertThat(view("upcoming")).isEmpty();
         assertThat(view("recent")).isEmpty();
+        assertThat(view("history")).isEmpty();
         var missing = http.getForEntity(BASE + "/9223372036854775807", String.class);
         assertThat(missing.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(missing.getBody()).isEqualTo("{\"code\":\"NOT_FOUND\"}");
@@ -193,6 +194,49 @@ class ReminderViewsIntegrationTest {
         assertThat(detail(expired.getId()).feedback()).isEqualTo(Feedback.WAITING);
         assertThat(detail(withdrawn.getId()).feedback()).isEqualTo(Feedback.WITHDRAWN);
         assertThat(detail(sent.getId()).feedback()).isEqualTo(Feedback.ACCEPTED);
+        verifyNoInteractions(sender);
+    }
+
+    @Test
+    void historyIncludesAllPreviousAndWithdrawnRemindersWithoutChangingRows() {
+        LocalDateTime end = now().truncatedTo(ChronoUnit.MICROS);
+        Reminder old = source(end.minusDays(30));
+        Reminder due = source(end);
+        Reminder tied = source(end);
+        Reminder upcoming = source(end.plusNanos(1000));
+        Reminder withdrawn = source(end.plusDays(1));
+        transactions.withdrawReminder(withdrawn.getId(), withdrawn.getVersion());
+        Reminder sent = source(end.plusDays(2));
+        var attempt = transactions.claim(sent.getCurrentDeliveryId(), end.plusDays(3)).orElseThrow();
+        transactions.recordResult(attempt.deliveryId(), attempt.attemptCount(), SmsSubmissionResult.accepted(null));
+        transactions.finalizeAccepted(attempt.deliveryId());
+        var before = rows();
+
+        var history = view("history");
+        assertThat(history).extracting(ReminderViewResponse::id)
+                .containsExactly(sent.getId(), withdrawn.getId(), tied.getId(), due.getId(), old.getId());
+        assertThat(history.getFirst().feedback()).isEqualTo(Feedback.ACCEPTED);
+        assertThat(history.getFirst().canRemindAgain()).isTrue();
+        assertThat(history.get(1).feedback()).isEqualTo(Feedback.WITHDRAWN);
+        assertThat(view("upcoming")).extracting(ReminderViewResponse::id).containsExactly(upcoming.getId());
+        assertThat(rows()).isEqualTo(before);
+        verifyNoInteractions(sender);
+    }
+
+    @Test
+    void historyKeepsUncertainAndFailedAlertsDiscoverableWithTheirActions() {
+        Reminder uncertain = source(Source.UNKNOWN);
+        Reminder rejected = source(Source.PERMANENT);
+        var before = rows();
+        var history = view("history");
+        assertThat(history).extracting(ReminderViewResponse::id)
+                .containsExactly(rejected.getId(), uncertain.getId());
+        assertThat(history.getFirst().canRemindAgain()).isTrue();
+        assertThat(history.get(1).feedback()).isEqualTo(Feedback.DELIVERY_UNCERTAIN);
+        assertThat(history.get(1).canRemindAgain()).isFalse();
+        assertThat(history.get(1).canEdit()).isFalse();
+        assertThat(history.get(1).canWithdraw()).isFalse();
+        assertThat(rows()).isEqualTo(before);
         verifyNoInteractions(sender);
     }
 

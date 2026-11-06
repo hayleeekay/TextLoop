@@ -17,6 +17,11 @@ public interface ReminderRepository extends JpaRepository<Reminder, Long> {
     List<Reminder> findByScheduledAtGreaterThanAndScheduledAtLessThanEqualOrderByScheduledAtDescIdDesc(
             LocalDateTime start, LocalDateTime end);
 
+    @Query("select r from Reminder r where r.scheduledAt <= :cutoff "
+            + "or r.withdrawnAt is not null or r.status <> 'PENDING' "
+            + "order by r.scheduledAt desc, r.id desc")
+    List<Reminder> findHistory(LocalDateTime cutoff);
+
     List<Reminder> findByStatusAndWithdrawnAtIsNullAndScheduledAtLessThanEqual(
             ReminderStatus status,
             LocalDateTime scheduledAt);
