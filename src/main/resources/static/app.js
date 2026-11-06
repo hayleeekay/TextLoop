@@ -148,8 +148,9 @@ function showBrowse(name = activeView, saved = false) {
   $('history').hidden = name !== 'history';
   $('home').setAttribute('aria-pressed', name === 'upcoming');
   $('history-tab').setAttribute('aria-pressed', name === 'history');
-  $('view-title').textContent = name === 'upcoming' ? 'Upcoming' : 'History';
-  $('view-help').textContent = name === 'upcoming' ? 'Your next reminder texts.' : 'Past and withdrawn reminders, ready when you need them again.';
+  $('new-reminder').hidden = name !== 'upcoming';
+  $('view-title').textContent = name === 'upcoming' ? 'Your reminders' : 'History';
+  $('view-help').textContent = name === 'upcoming' ? 'Scheduled texts and sends that need attention.' : 'Sent and withdrawn reminders from the last 7 days.';
   if (!saved) notice('');
   controls();
   $('view-title').focus();
@@ -223,10 +224,10 @@ async function reviewCurrentReminder() {
   }
 }
 
-function renderCard(reminder, name, expanded) {
+function renderCard(reminder, expanded) {
   const row = node('li', undefined, 'reminder-card');
   row.append(node('h2', reminder.message, 'message'));
-  const labels = { WAITING: name === 'upcoming' ? 'Scheduled' : 'Waiting to send',
+  const labels = { WAITING: 'Waiting to send',
     ACCEPTED: 'Sent (simulated)', WITHDRAWN: 'Withdrawn', RETRY_WAITING: 'Retry scheduled',
     RETRY_EXHAUSTED: 'Sending stopped', PERMANENT_REJECTION: 'Not sent',
     DELIVERY_UNCERTAIN: 'Needs review', LEGACY_SENT: 'Previously sent',
@@ -262,17 +263,17 @@ async function refreshList(name) {
   target.replaceChildren(node('p', 'Loading...'));
   target.setAttribute('aria-busy', 'true');
   try {
-    const reminders = await request('/' + name);
+    const reminders = await request(name === 'upcoming' ? '/home' : '/history');
     if (!Array.isArray(reminders)) throw {};
     if (read !== listReads[name]) return false;
     const list = node('ul');
     for (const reminder of reminders) {
       if (!isReminder(reminder)) throw {};
-      list.append(renderCard(reminder, name, expanded));
+      list.append(renderCard(reminder, expanded));
     }
     const empty = node('div', undefined, 'empty');
-    empty.append(node('h2', name === 'upcoming' ? 'No upcoming reminders' : 'No previous reminders yet'),
-      node('p', name === 'upcoming' ? 'Schedule a text whenever you need a reminder.' : 'Past and withdrawn reminders will appear here.', 'hint'));
+    empty.append(node('h2', name === 'upcoming' ? 'No reminders waiting' : 'No history in the last 7 days'),
+      node('p', name === 'upcoming' ? 'Schedule a text whenever you need a reminder.' : 'Sent and withdrawn reminders appear here for 7 days.', 'hint'));
     target.replaceChildren(reminders.length ? list : empty);
     controls();
     return true;

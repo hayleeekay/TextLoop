@@ -340,14 +340,18 @@ To observe background processing, retrieve the list again after a reminder becom
 due. Its status changes to `SENT` after sender acceptance is recorded and finalized.
 For reminders that remain `PENDING`, see [Retries and recovery](#retries-and-recovery).
 
-### Upcoming, History, Recent, and detail
+### Home, Upcoming, History, Recent, and detail
 
 - `GET /api/reminders/upcoming`: unwithdrawn `PENDING` reminders scheduled strictly
   after the current server-local time, ordered by scheduled time then ID, ascending.
-- `GET /api/reminders/history`: reminders whose scheduled time has arrived, are
-  withdrawn, or are no longer `PENDING`, ordered by scheduled time then ID, descending.
-  This includes older reminders without a seven-day limit. It is a reminder list,
-  not an event-by-event delivery history.
+- `GET /api/reminders/home`: unwithdrawn `PENDING` reminders without recorded sender
+  acceptance, ordered by scheduled time then ID, ascending. Due reminders, retries,
+  failures, and uncertain sends stay here, including beyond seven days.
+- `GET /api/reminders/history`: sent and withdrawn reminders from the last seven days.
+  Sent reminders use `scheduledAt`; withdrawn reminders use `withdrawnAt`. Results are
+  ordered by that time then ID, descending. The lower boundary is exclusive and the
+  current time is inclusive. Recorded acceptance qualifies before `SENT` finalization.
+  Leaving this window does not delete a reminder. This is not an event timeline.
 - `GET /api/reminders/recent`: reminders scheduled within the last seven days,
   ordered by scheduled time then ID, descending. The lower boundary is exclusive;
   the current time is inclusive. Withdrawn and held/failed reminders are included.

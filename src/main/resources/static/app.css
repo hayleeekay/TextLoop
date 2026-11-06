@@ -56,8 +56,6 @@ input[readonly], textarea[readonly] { background: #f0f4f2; }
 #detail h2 { margin-bottom: .7rem; }
 #detail p + p { margin-top: .4rem; }
 footer { margin-top: 2rem; color: #526966; font-size: .85rem; }
-footer details { margin-top: .5rem; }
-footer details p { margin-top: .5rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 [hidden] { display: none !important; }
 @media (max-width: 35rem) {
