@@ -34,10 +34,22 @@ public class ReminderReadService {
                 ReminderStatus.PENDING, cutoff()));
     }
 
+    public List<ReminderViewResponse> home() {
+        return views(reminders.findByStatusAndWithdrawnAtIsNullOrderByScheduledAtAscIdAsc(ReminderStatus.PENDING))
+                .stream().filter(view -> view.feedback() != Feedback.ACCEPTED).toList();
+    }
+
     public List<ReminderViewResponse> recent() {
         LocalDateTime end = cutoff();
         return views(reminders.findByScheduledAtGreaterThanAndScheduledAtLessThanEqualOrderByScheduledAtDescIdDesc(
                 end.minusDays(7), end));
+    }
+
+    public List<ReminderViewResponse> history() {
+        LocalDateTime end = cutoff();
+        return views(reminders.findHistory(end.minusDays(7), end)).stream()
+                .filter(view -> view.feedback() == Feedback.ACCEPTED || view.feedback() == Feedback.LEGACY_SENT
+                        || view.feedback() == Feedback.WITHDRAWN).toList();
     }
 
     public ReminderViewResponse detail(Long id) {

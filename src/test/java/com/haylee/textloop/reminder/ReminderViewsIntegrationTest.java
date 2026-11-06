@@ -145,6 +145,8 @@ class ReminderViewsIntegrationTest {
     void emptyCollectionsAndFixedDetailErrors() {
         assertThat(view("upcoming")).isEmpty();
         assertThat(view("recent")).isEmpty();
+        assertThat(view("history")).isEmpty();
+        assertThat(view("home")).isEmpty();
         var missing = http.getForEntity(BASE + "/9223372036854775807", String.class);
         assertThat(missing.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(missing.getBody()).isEqualTo("{\"code\":\"NOT_FOUND\"}");
@@ -193,6 +195,63 @@ class ReminderViewsIntegrationTest {
         assertThat(detail(expired.getId()).feedback()).isEqualTo(Feedback.WAITING);
         assertThat(detail(withdrawn.getId()).feedback()).isEqualTo(Feedback.WITHDRAWN);
         assertThat(detail(sent.getId()).feedback()).isEqualTo(Feedback.ACCEPTED);
+        verifyNoInteractions(sender);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void historyUsesSevenDayBoundariesAndActivityOrder(boolean withdrawn) {
+        LocalDateTime end = now().truncatedTo(ChronoUnit.MICROS);
+        LocalDateTime start = end.minusDays(7);
+        var times = List.of(start.minusNanos(1000), start, start.plusNanos(1000),
+                end.minusNanos(1000), end, end, end.plusNanos(1000));
+        var ids = new java.util.ArrayList<Long>();
+        for (int i = 0; i < times.size(); i++) {
+            Reminder reminder = source(withdrawn ? end.plusDays(30 - i) : times.get(i));
+            if (withdrawn) {
+                jdbc.update("update reminders set withdrawn_at = ? where id = ?", times.get(i), reminder.getId());
+            } else {
+                jdbc.update("update reminders set status = 'SENT', current_delivery_id = null where id = ?", reminder.getId());
+            }
+            ids.add(reminder.getId());
+        }
+        var before = rows();
+        for (int i = 0; i < 2; i++) {
+            assertThat(view("history")).extracting(ReminderViewResponse::id)
+                    .containsExactly(ids.get(5), ids.get(4), ids.get(3), ids.get(2));
+        }
+        clock.advance(Duration.ofDays(8));
+        assertThat(view("history")).isEmpty();
+        assertThat(rows()).isEqualTo(before);
+        verifyNoInteractions(sender);
+    }
+
+    @Test
+    void acceptanceMovesToHistoryBeforeFinalizationWhileUnsentAlertsStayOnHome() {
+        Reminder accepted = source(Source.ACCEPTED);
+        Reminder sent = source(Source.SENT);
+        Reminder withdrawn = source(Source.WITHDRAWN);
+        var unresolved = Stream.of(Source.READY, Source.UNKNOWN, Source.PERMANENT, Source.RETRYABLE,
+                Source.EXHAUSTED, Source.LEGACY_PENDING, Source.MISSING).map(this::source).toList();
+        Reminder upcoming = source(now().plusDays(1));
+        var before = rows();
+        var history = view("history");
+        assertThat(history).extracting(ReminderViewResponse::id)
+                .containsExactly(withdrawn.getId(), sent.getId(), accepted.getId());
+        assertThat(history).allMatch(ReminderViewResponse::canRemindAgain);
+        assertThat(detail(accepted.getId()).status()).isEqualTo(ReminderStatus.PENDING);
+        assertThat(view("home")).extracting(ReminderViewResponse::id)
+                .containsExactlyInAnyOrderElementsOf(Stream.concat(unresolved.stream(), Stream.of(upcoming)).map(Reminder::getId).toList());
+        clock.advance(Duration.ofDays(8));
+        assertThat(view("history")).isEmpty();
+        var home = view("home");
+        assertThat(home).extracting(ReminderViewResponse::id)
+                .containsExactlyInAnyOrderElementsOf(Stream.concat(unresolved.stream(), Stream.of(upcoming)).map(Reminder::getId).toList());
+        assertThat(home).filteredOn(view -> view.feedback() == Feedback.DELIVERY_UNCERTAIN)
+                .allMatch(view -> !view.canRemindAgain() && !view.canEdit() && !view.canWithdraw());
+        assertThat(home).filteredOn(view -> view.feedback() == Feedback.PERMANENT_REJECTION)
+                .allMatch(ReminderViewResponse::canRemindAgain);
+        assertThat(rows()).isEqualTo(before);
         verifyNoInteractions(sender);
     }
 

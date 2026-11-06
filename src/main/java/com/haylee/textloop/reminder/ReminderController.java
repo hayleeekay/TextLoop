@@ -57,9 +57,19 @@ public class ReminderController {
         return reminderReadService.upcoming();
     }
 
+    @GetMapping("/home")
+    public List<ReminderViewResponse> home() {
+        return reminderReadService.home();
+    }
+
     @GetMapping("/recent")
     public List<ReminderViewResponse> recent() {
         return reminderReadService.recent();
+    }
+
+    @GetMapping("/history")
+    public List<ReminderViewResponse> history() {
+        return reminderReadService.history();
     }
 
     @GetMapping("/{id}")
