@@ -11,11 +11,11 @@
 <header>
   <div class="header-inner">
     <p class="brand">Text<span>Loop</span></p>
+    <button id="refresh" type="button" class="quiet">Refresh</button>
     <nav aria-label="Reminders">
       <button id="home" type="button" aria-pressed="true" data-navigation>Home</button>
       <button id="history-tab" type="button" aria-pressed="false" data-navigation>History</button>
     </nav>
-    <button id="refresh" type="button" class="quiet">Refresh</button>
   </div>
 </header>
 <main>
@@ -49,12 +49,10 @@
   <div id="form-feedback" role="status" aria-live="polite"></div>
   <section id="detail" hidden aria-label="Current saved version"></section>
   <section id="browse" aria-labelledby="view-title">
-    <div class="heading">
-      <div>
-        <h1 id="view-title" tabindex="-1">Your reminders</h1>
-        <p id="view-help" class="hint">Scheduled texts and sends that need attention.</p>
-      </div>
+    <div class="heading browse-heading">
+      <h1 id="view-title" tabindex="-1">Your reminders</h1>
       <button id="new-reminder" type="button" class="primary">+ New reminder</button>
+      <p id="view-help" class="hint">Scheduled texts and sends that need attention.</p>
     </div>
     <div id="upcoming" aria-live="polite"></div>
     <div id="history" hidden aria-live="polite"></div>
