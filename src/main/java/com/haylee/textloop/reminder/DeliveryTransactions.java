@@ -98,8 +98,15 @@ public class DeliveryTransactions {
     }
 
     public Reminder withdrawReminder(Long id, long expectedVersion) {
-        Reminder reminder = lockEditable(id, expectedVersion).getReminder();
-        // Keep the pointer and snapshot: a withdrawn alert is not an untracked legacy reminder.
+        Reminder reminder = reminders.findLockedById(id)
+                .orElseThrow(() -> new ReminderMutationException(ReminderMutationException.Reason.NOT_FOUND));
+        if (reminder.getVersion() != expectedVersion) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.STALE_VERSION);
+        }
+        if (reminder.getStatus() != ReminderStatus.PENDING || reminder.getWithdrawnAt() != null) {
+            throw new ReminderMutationException(ReminderMutationException.Reason.NOT_EDITABLE);
+        }
+        // Stop future attempts without changing any submitted or missing delivery evidence.
         reminder.withdraw(now());
         return reminder;
     }
@@ -147,7 +154,7 @@ public class DeliveryTransactions {
 
     public void recordResult(UUID id, int attemptCount, SmsSubmissionResult result) {
         Delivery delivery = lock(id);
-        if (!currentPending(delivery) || delivery.getState() != DeliveryState.UNKNOWN
+        if (!currentPendingIntent(delivery) || delivery.getState() != DeliveryState.UNKNOWN
                 || delivery.getAttemptCount() != attemptCount) {
             throw new RecoveryConflictException();
         }
@@ -156,7 +163,7 @@ public class DeliveryTransactions {
 
     public boolean finalizeAccepted(UUID id) {
         Delivery delivery = lock(id);
-        if (!currentPending(delivery) || delivery.getState() != DeliveryState.ACCEPTED) {
+        if (!currentPendingIntent(delivery) || delivery.getState() != DeliveryState.ACCEPTED) {
             return false;
         }
         delivery.getReminder().setStatus(ReminderStatus.SENT);
@@ -165,7 +172,7 @@ public class DeliveryTransactions {
 
     public UUID recover(UUID id, long expectedVersion, RecoveryAction action, boolean acknowledgeDuplicateRisk) {
         Delivery delivery = lock(id);
-        if (delivery.getVersion() != expectedVersion || !currentPending(delivery)) {
+        if (delivery.getVersion() != expectedVersion || !currentPendingIntent(delivery)) {
             throw new RecoveryConflictException();
         }
         DeliveryPolicy.requireRecoveryAction(delivery, action, acknowledgeDuplicateRisk);
@@ -219,9 +226,13 @@ public class DeliveryTransactions {
     }
 
     private boolean currentPending(Delivery delivery) {
+        return currentPendingIntent(delivery) && delivery.getReminder().getWithdrawnAt() == null;
+    }
+
+    private boolean currentPendingIntent(Delivery delivery) {
         Reminder reminder = delivery.getReminder();
+        // Withdrawal prevents new attempts, not recording the outcome of an existing one.
         return reminder.getStatus() == ReminderStatus.PENDING
-                && reminder.getWithdrawnAt() == null
                 && delivery.getId().equals(reminder.getCurrentDeliveryId());
     }
 

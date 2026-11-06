@@ -48,14 +48,16 @@ function deliveryText(reminder) {
   switch (reminder.feedback) {
     case 'WAITING': return 'Waiting for simulated sending.';
     case 'ACCEPTED': return 'Sender acceptance recorded. This does not confirm delivery to a phone.';
-    case 'WITHDRAWN': return 'Withdrawn. This alert will not send.';
-    case 'RETRY_WAITING': return 'Waiting to retry, no earlier than ' + localTime(reminder.nextAttemptAt) + '.';
-    case 'RETRY_EXHAUSTED': return 'Sending attempts stopped. Delivery review is needed before another attempt.';
+    case 'WITHDRAWN': return 'Withdrawn. This reminder is no longer active.';
+    case 'RETRY_WAITING': return reminder.withdrawnAt ? 'The last attempt was rejected. Further attempts have been stopped.'
+      : 'Waiting to retry, no earlier than ' + localTime(reminder.nextAttemptAt) + '.';
+    case 'RETRY_EXHAUSTED': return reminder.withdrawnAt ? 'Sending attempts stopped. You can choose Remind me again.'
+      : 'Sending attempts stopped. Delivery review is needed before another attempt.';
     case 'PERMANENT_REJECTION': return 'The sender rejected this alert. You can choose Remind me again.';
     case 'DELIVERY_UNCERTAIN': return 'Sending could not be confirmed. Delivery review is needed before scheduling again.';
     case 'LEGACY_SENT': return 'Previously marked sent. Acceptance evidence is unavailable.';
     case 'UNTRACKED':
-    case 'INCONSISTENT_DELIVERY': return 'Delivery information needs review. Changes are unavailable.';
+    case 'INCONSISTENT_DELIVERY': return 'Delivery information needs review. Editing and scheduling again are unavailable.';
     default: return 'Refresh details for delivery information.';
   }
 }
@@ -162,6 +164,7 @@ function summary(reminder, container) {
     node('p', 'To: ' + reminder.phoneNumber),
     node('p', 'Scheduled: ' + localTime(reminder.scheduledAt)),
     node('p', deliveryText(reminder), 'hint'));
+  if (reminder.withdrawnAt) container.append(node('p', 'Withdrawn: ' + localTime(reminder.withdrawnAt), 'hint'));
 }
 
 function renderDetail(reminder) {
@@ -189,7 +192,7 @@ async function openAction(nextMode, id) {
       await refreshLists();
     } else if (nextMode === 'withdraw') {
       notice('');
-      if (!window.confirm('Withdraw this alert so it will not send?')) return;
+      if (!window.confirm('Withdraw this reminder? Further attempts will stop, but an attempt already in progress may still send.')) return;
       selected = reminder;
       await mutate('withdraw', reminder.id, { expectedVersion: reminder.version });
     } else {
@@ -224,7 +227,7 @@ async function reviewCurrentReminder() {
   }
 }
 
-function renderCard(reminder, expanded) {
+function renderCard(reminder, name, expanded) {
   const row = node('li', undefined, 'reminder-card');
   row.append(node('h2', reminder.message, 'message'));
   const labels = { WAITING: 'Waiting to send',
@@ -236,12 +239,12 @@ function renderCard(reminder, expanded) {
     'DELIVERY_UNCERTAIN', 'UNTRACKED', 'INCONSISTENT_DELIVERY'].includes(reminder.feedback);
   const meta = node('div', undefined, 'meta');
   meta.append(node('span', 'Scheduled for ' + displayTime(reminder.scheduledAt)),
-    node('span', labels[reminder.feedback] ?? 'Refresh details', attention ? 'badge attention' : 'badge'));
+    node('span', reminder.withdrawnAt ? 'Withdrawn' : labels[reminder.feedback] ?? 'Refresh details', attention ? 'badge attention' : 'badge'));
   row.append(meta);
   if (attention) row.append(node('p', deliveryText(reminder), 'attention-text'));
   const actions = node('div', undefined, 'actions');
   if (reminder.canEdit) actions.append(button('Edit', () => openAction('edit', reminder.id)));
-  if (reminder.canWithdraw) actions.append(button('Withdraw', () => openAction('withdraw', reminder.id)));
+  if (name === 'upcoming' && reminder.canWithdraw) actions.append(button('Withdraw', () => openAction('withdraw', reminder.id)));
   if (reminder.canRemindAgain) actions.append(button('Remind me again', () => openAction('reuse', reminder.id)));
   for (const action of actions.children) action.dataset.selection = '';
   if (actions.children.length) row.append(actions);
@@ -252,6 +255,7 @@ function renderCard(reminder, expanded) {
   const body = node('div', undefined, 'saved-details');
   body.append(node('p', 'To: ' + reminder.phoneNumber),
     node('p', 'Scheduled: ' + localTime(reminder.scheduledAt)), node('p', deliveryText(reminder)));
+  if (reminder.withdrawnAt) body.append(node('p', 'Withdrawn: ' + localTime(reminder.withdrawnAt)));
   details.append(body); row.append(details);
   return row;
 }
@@ -269,7 +273,7 @@ async function refreshList(name) {
     const list = node('ul');
     for (const reminder of reminders) {
       if (!isReminder(reminder)) throw {};
-      list.append(renderCard(reminder, expanded));
+      list.append(renderCard(reminder, name, expanded));
     }
     const empty = node('div', undefined, 'empty');
     empty.append(node('h2', name === 'upcoming' ? 'No reminders waiting' : 'No history in the last 7 days'),

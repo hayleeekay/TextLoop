@@ -49,7 +49,7 @@ public class ReminderReadService {
         LocalDateTime end = cutoff();
         return views(reminders.findHistory(end.minusDays(7), end)).stream()
                 .filter(view -> view.feedback() == Feedback.ACCEPTED || view.feedback() == Feedback.LEGACY_SENT
-                        || view.feedback() == Feedback.WITHDRAWN).toList();
+                        || view.withdrawnAt() != null).toList();
     }
 
     public ReminderViewResponse detail(Long id) {
@@ -73,32 +73,34 @@ public class ReminderReadService {
 
     private ReminderViewResponse view(Reminder reminder, Delivery delivery) {
         Feedback feedback = feedback(reminder, delivery);
-        boolean editable = feedback == Feedback.WAITING && DeliveryPolicy.editable(delivery);
+        boolean editable = reminder.getWithdrawnAt() == null
+                && feedback == Feedback.WAITING && DeliveryPolicy.editable(delivery);
+        boolean withdrawable = reminder.getStatus() == ReminderStatus.PENDING && reminder.getWithdrawnAt() == null;
         boolean reusable = feedback == Feedback.LEGACY_SENT
                 || (delivery != null && feedback != Feedback.INCONSISTENT_DELIVERY && DeliveryPolicy.reusable(delivery));
         return new ReminderViewResponse(reminder.getId(), reminder.getMessage(), reminder.getScheduledAt(),
                 reminder.getPhoneNumber(), reminder.getStatus(), reminder.getVersion(), reminder.getWithdrawnAt(),
-                editable, editable, reusable, feedback,
-                feedback == Feedback.RETRY_WAITING ? delivery.getNextAttemptAt() : null);
+                editable, withdrawable, reusable, feedback,
+                feedback == Feedback.RETRY_WAITING && reminder.getWithdrawnAt() == null ? delivery.getNextAttemptAt() : null);
     }
 
     private Feedback feedback(Reminder reminder, Delivery delivery) {
         if (reminder.getCurrentDeliveryId() == null) {
-            if (reminder.getWithdrawnAt() != null) return Feedback.INCONSISTENT_DELIVERY;
+            if (reminder.getStatus() == ReminderStatus.SENT && reminder.getWithdrawnAt() != null) {
+                return Feedback.INCONSISTENT_DELIVERY;
+            }
             return reminder.getStatus() == ReminderStatus.SENT ? Feedback.LEGACY_SENT : Feedback.UNTRACKED;
         }
         if (delivery == null || !delivery.getReminder().getId().equals(reminder.getId())) {
             return Feedback.INCONSISTENT_DELIVERY;
         }
-        if (reminder.getWithdrawnAt() != null) {
-            return reminder.getStatus() == ReminderStatus.PENDING && DeliveryPolicy.editable(delivery)
-                    ? Feedback.WITHDRAWN : Feedback.INCONSISTENT_DELIVERY;
-        }
         if (reminder.getStatus() == ReminderStatus.SENT) {
             return delivery.getState() == DeliveryState.ACCEPTED ? Feedback.ACCEPTED : Feedback.INCONSISTENT_DELIVERY;
         }
         return switch (delivery.getState()) {
-            case READY -> DeliveryPolicy.editable(delivery) ? Feedback.WAITING : Feedback.INCONSISTENT_DELIVERY;
+            case READY -> DeliveryPolicy.editable(delivery)
+                    ? reminder.getWithdrawnAt() == null ? Feedback.WAITING : Feedback.WITHDRAWN
+                    : Feedback.INCONSISTENT_DELIVERY;
             case ACCEPTED -> Feedback.ACCEPTED;
             case UNKNOWN -> Feedback.DELIVERY_UNCERTAIN;
             case PERMANENT_REJECTION -> Feedback.PERMANENT_REJECTION;

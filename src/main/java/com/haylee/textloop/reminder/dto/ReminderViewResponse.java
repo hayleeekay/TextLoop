@@ -23,6 +23,7 @@ public record ReminderViewResponse(
     public enum Feedback {
         WAITING,
         ACCEPTED,
+        /** Never claimed before withdrawal. Other outcomes retain their feedback alongside withdrawnAt. */
         WITHDRAWN,
         RETRY_WAITING,
         RETRY_EXHAUSTED,

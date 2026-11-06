@@ -23,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -248,7 +249,7 @@ class ReminderViewsIntegrationTest {
         assertThat(home).extracting(ReminderViewResponse::id)
                 .containsExactlyInAnyOrderElementsOf(Stream.concat(unresolved.stream(), Stream.of(upcoming)).map(Reminder::getId).toList());
         assertThat(home).filteredOn(view -> view.feedback() == Feedback.DELIVERY_UNCERTAIN)
-                .allMatch(view -> !view.canRemindAgain() && !view.canEdit() && !view.canWithdraw());
+                .allMatch(view -> !view.canRemindAgain() && !view.canEdit() && view.canWithdraw());
         assertThat(home).filteredOn(view -> view.feedback() == Feedback.PERMANENT_REJECTION)
                 .allMatch(ReminderViewResponse::canRemindAgain);
         assertThat(rows()).isEqualTo(before);
@@ -256,12 +257,13 @@ class ReminderViewsIntegrationTest {
     }
 
     enum Source { READY, UNKNOWN, ACCEPTED, SENT, WITHDRAWN, PERMANENT, RETRYABLE, EXHAUSTED, EXTRA,
-        LEGACY_SENT, LEGACY_PENDING, MISSING, MISMATCH, SENT_READY, WITHDRAWN_ACCEPTED, READY_CLAIMED, RETRY_WITHOUT_TIME }
+        LEGACY_SENT, LEGACY_SENT_WITHDRAWN, LEGACY_PENDING, MISSING, MISMATCH, SENT_READY, WITHDRAWN_ACCEPTED, READY_CLAIMED, RETRY_WITHOUT_TIME }
 
     private Reminder source(Source state) {
-        if (state == Source.LEGACY_SENT || state == Source.LEGACY_PENDING) {
+        if (state == Source.LEGACY_SENT || state == Source.LEGACY_SENT_WITHDRAWN || state == Source.LEGACY_PENDING) {
             Reminder reminder = new Reminder("Legacy view message", PHONE, now().minusDays(1));
-            if (state == Source.LEGACY_SENT) reminder.setStatus(ReminderStatus.SENT);
+            if (state != Source.LEGACY_PENDING) reminder.setStatus(ReminderStatus.SENT);
+            if (state == Source.LEGACY_SENT_WITHDRAWN) reminder.withdraw(now());
             return reminders.save(reminder);
         }
         Reminder reminder = source(now().minusDays(1).truncatedTo(ChronoUnit.MICROS));
@@ -318,11 +320,12 @@ class ReminderViewsIntegrationTest {
                 Arguments.of(Source.EXHAUSTED, Feedback.RETRY_EXHAUSTED, false, false),
                 Arguments.of(Source.EXTRA, Feedback.RETRY_WAITING, false, false),
                 Arguments.of(Source.LEGACY_SENT, Feedback.LEGACY_SENT, false, true),
+                Arguments.of(Source.LEGACY_SENT_WITHDRAWN, Feedback.INCONSISTENT_DELIVERY, false, false),
                 Arguments.of(Source.LEGACY_PENDING, Feedback.UNTRACKED, false, false),
                 Arguments.of(Source.MISSING, Feedback.INCONSISTENT_DELIVERY, false, false),
                 Arguments.of(Source.MISMATCH, Feedback.INCONSISTENT_DELIVERY, false, false),
                 Arguments.of(Source.SENT_READY, Feedback.INCONSISTENT_DELIVERY, false, false),
-                Arguments.of(Source.WITHDRAWN_ACCEPTED, Feedback.INCONSISTENT_DELIVERY, false, false),
+                Arguments.of(Source.WITHDRAWN_ACCEPTED, Feedback.ACCEPTED, false, true),
                 Arguments.of(Source.READY_CLAIMED, Feedback.INCONSISTENT_DELIVERY, false, false),
                 Arguments.of(Source.RETRY_WITHOUT_TIME, Feedback.INCONSISTENT_DELIVERY, false, false));
     }
@@ -337,7 +340,7 @@ class ReminderViewsIntegrationTest {
         assertThat(view("recent")).containsExactly(result);
         assertThat(result.feedback()).isEqualTo(feedback);
         assertThat(result.canEdit()).isEqualTo(editable);
-        assertThat(result.canWithdraw()).isEqualTo(editable);
+        assertThat(result.canWithdraw()).isEqualTo(source.getStatus() == ReminderStatus.PENDING && source.getWithdrawnAt() == null);
         assertThat(result.canRemindAgain()).isEqualTo(reusable);
         assertThat(result.message()).isEqualTo(source.getMessage());
         assertThat(result.phoneNumber()).isEqualTo(source.getPhoneNumber());
@@ -357,11 +360,49 @@ class ReminderViewsIntegrationTest {
             }
             if (!editable) {
                 assertThat(edit(result).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-                assertThat(withdraw(result.id(), result.version()).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
             }
             assertThat(sourceRows(source.getId())).isEqualTo(sourceBefore);
             if (!reusable) assertThat(rows()).isEqualTo(before);
         }
+        verifyNoInteractions(sender);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = Source.class, names = {"READY", "UNKNOWN", "ACCEPTED", "PERMANENT", "RETRYABLE",
+            "EXHAUSTED", "EXTRA", "LEGACY_PENDING", "MISSING", "MISMATCH", "READY_CLAIMED", "RETRY_WITHOUT_TIME"})
+    void withdrawingHomeAlertsPreservesDeliveryEvidenceAndUncertainty(Source state) {
+        Reminder source = source(state);
+        var original = detail(source.getId());
+        var before = rows();
+        assertThat(original.canWithdraw()).isTrue();
+        assertThat(withdraw(original.id(), original.version() + 1).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(rows()).isEqualTo(before);
+
+        assertThat(withdraw(original.id(), original.version()).getStatusCode()).isEqualTo(HttpStatus.OK);
+        var result = detail(original.id());
+        assertThat(result.withdrawnAt()).isEqualTo(now().truncatedTo(ChronoUnit.MICROS));
+        assertThat(result.version()).isEqualTo(original.version() + 1);
+        assertThat(result.message()).isEqualTo(original.message());
+        assertThat(result.phoneNumber()).isEqualTo(original.phoneNumber());
+        assertThat(result.scheduledAt()).isEqualTo(original.scheduledAt());
+        assertThat(result.feedback()).isEqualTo(state == Source.READY ? Feedback.WITHDRAWN : original.feedback());
+        assertThat(result.canEdit()).isFalse();
+        assertThat(result.canWithdraw()).isFalse();
+        assertThat(result.nextAttemptAt()).isNull();
+        assertThat(view("home")).extracting(ReminderViewResponse::id).doesNotContain(result.id());
+        assertThat(view("history")).contains(result);
+        assertThat(jdbc.queryForList("select * from deliveries order by id")).isEqualTo(before.get(1));
+        var withdrawnRows = rows();
+        assertThat(withdraw(result.id(), result.version()).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(rows()).isEqualTo(withdrawnRows);
+        boolean reusable = List.of(Source.READY, Source.ACCEPTED, Source.PERMANENT, Source.RETRYABLE,
+                Source.EXHAUSTED, Source.EXTRA).contains(state);
+        assertThat(result.canRemindAgain()).isEqualTo(reusable);
+        var sourceBeforeReuse = sourceRows(source.getId());
+        var response = reuse(result.id(), reuseRequest(result));
+        assertThat(response.getStatusCode()).isEqualTo(reusable ? HttpStatus.OK : HttpStatus.CONFLICT);
+        if (state == Source.UNKNOWN) assertThat(response.getBody().path("code").asString()).isEqualTo("DELIVERY_REVIEW_REQUIRED");
+        assertThat(sourceRows(source.getId())).isEqualTo(sourceBeforeReuse);
         verifyNoInteractions(sender);
     }
 
@@ -463,7 +504,9 @@ class ReminderViewsIntegrationTest {
             assertThat(refreshed.canEdit()).isFalse();
             assertThat(refreshed.version()).isEqualTo(original.version());
             assertThat(edit(original).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-            assertThat(withdraw(original.id(), original.version()).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+            assertThat(withdraw(original.id(), original.version()).getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(detail(original.id()).feedback()).isEqualTo(Feedback.DELIVERY_UNCERTAIN);
+            assertThat(detail(original.id()).withdrawnAt()).isNotNull();
         } else {
             assertThat(refreshed.message()).isEqualTo("Corrected message");
             assertThat(refreshed.version()).isGreaterThan(original.version());
