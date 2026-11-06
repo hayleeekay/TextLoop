@@ -419,7 +419,10 @@ form.addEventListener('submit', async (event) => {
 });
 
 $('new-reminder').addEventListener('click', () => showForm('create'));
-$('refresh').addEventListener('click', () => refreshLists());
+$('refresh').addEventListener('click', () => {
+  refreshLists();
+  if (mode === 'view' && !needsReview && !$('detail').hidden) openDetail(selected.id);
+});
 window.addEventListener('beforeunload', (event) => {
   if (saving || uncertainCreate || dirty) { event.preventDefault(); event.returnValue = ''; }
 });
