@@ -25,7 +25,7 @@ It does not send real texts and is not ready for public use.
 Currently implemented:
 
 - Create reminders through the web app or API and store them in PostgreSQL
-- Edit or withdraw reminders before sending begins
+- Edit reminders before sending begins or withdraw them from Home
 - Check for due reminders every minute and simulate sender acceptance
 - Browse sent and withdrawn reminders from the last seven days in History
 - Use Remind me again to schedule a fresh alert with a new future time
@@ -36,6 +36,11 @@ Simulated reply receipt and a standalone command parser also exist, but replies 
 not change reminders yet.
 
 For endpoint contracts and local request examples, see the [API guide](docs/api-guide.md).
+
+## Running Locally
+
+To try the web UI with simulated sending, follow the [local setup guide](docs/local-setup.md).
+It covers Java, PostgreSQL, starting the app, and a first reminder. No SMS account is needed.
 
 ## First Version Goal
 
