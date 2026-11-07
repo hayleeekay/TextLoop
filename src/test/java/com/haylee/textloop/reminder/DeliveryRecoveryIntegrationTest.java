@@ -215,9 +215,10 @@ class DeliveryRecoveryIntegrationTest {
 
     @ParameterizedTest
     @EnumSource(SmsSubmissionResult.Outcome.class)
-    void claimedAttemptRejectsMutationsAndStillRecordsItsOutcome(SmsSubmissionResult.Outcome outcome) throws Exception {
+    void withdrawalDuringSubmissionPreservesOutcomeAndDoesNotBlockHealthyReminders(SmsSubmissionResult.Outcome outcome) throws Exception {
         Delivery delivery = create("Claimed snapshot");
         var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        Delivery healthy = create("Healthy reminder after withdrawal");
         var enteredSender = new CountDownLatch(1);
         var finishSender = new CountDownLatch(1);
         when(sender.sendSms(eq(delivery.getId()), anyString(), anyString())).thenAnswer(invocation -> {
@@ -233,9 +234,11 @@ class DeliveryRecoveryIntegrationTest {
             assertThatThrownBy(() -> reminders().editReminder(reminder.getId(), new EditReminderRequest(
                     "Too late", now().plusHours(1), reminder.getVersion())))
                     .isInstanceOf(ReminderMutationException.class);
-            assertThatThrownBy(() -> reminders().withdrawReminder(reminder.getId(), reminder.getVersion()))
-                    .isInstanceOf(ReminderMutationException.class);
             assertThat(storedRows()).isEqualTo(before);
+            var beforeDelivery = jdbc().queryForList("select * from deliveries order by id");
+            reminders().withdrawReminder(reminder.getId(), reminder.getVersion());
+            assertThat(jdbc().queryForList("select * from deliveries order by id")).isEqualTo(beforeDelivery);
+            assertThat(transactions().claim(delivery.getId(), now())).isEmpty();
         } finally {
             finishSender.countDown();
         }
@@ -243,7 +246,61 @@ class DeliveryRecoveryIntegrationTest {
         assertThat(reload(delivery.getId()).getState().name()).isEqualTo(outcome.name());
         assertThat(reminderStatus(delivery)).isEqualTo(outcome == SmsSubmissionResult.Outcome.ACCEPTED
                 ? ReminderStatus.SENT : ReminderStatus.PENDING);
+        assertThat(reminderStatus(healthy)).isEqualTo(ReminderStatus.SENT);
+        assertThat(reminderRows().findById(reminder.getId()).orElseThrow().getWithdrawnAt()).isNotNull();
+        boot();
+        clock.advance(Duration.ofDays(1));
+        pass();
         verify(sender, times(1)).sendSms(delivery.getId(), "+12035550100", delivery.getMessage());
+        verify(sender, times(1)).sendSms(healthy.getId(), "+12035550100", healthy.getMessage());
+        assertThat(reload(delivery.getId()).getAttemptCount()).isEqualTo(1);
+        assertThat(reload(delivery.getId()).getMessage()).isEqualTo(delivery.getMessage());
+    }
+
+    @Test
+    void withdrawnAcceptanceStillFinalizesAfterFailedSaveAndRestartWithoutResubmission() {
+        Delivery delivery = create("Withdrawn acceptance");
+        var attempt = transactions().claim(delivery.getId(), now()).orElseThrow();
+        var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        reminders().withdrawReminder(reminder.getId(), reminder.getVersion());
+        transactions().recordResult(delivery.getId(), attempt.attemptCount(), SmsSubmissionResult.accepted("accepted-reference"));
+        failCommit("reminders", "NEW.status = 'SENT'");
+        assertThatThrownBy(() -> transactions().finalizeAccepted(delivery.getId())).isInstanceOf(RuntimeException.class);
+        assertThat(reminderStatus(delivery)).isEqualTo(ReminderStatus.PENDING);
+        removeCommitFailure("reminders");
+        boot();
+        pass();
+        pass();
+        assertThat(reminderStatus(delivery)).isEqualTo(ReminderStatus.SENT);
+        assertThat(reminderRows().findById(reminder.getId()).orElseThrow().getWithdrawnAt()).isNotNull();
+        assertThat(reload(delivery.getId()).getAcceptanceReference()).isEqualTo("accepted-reference");
+        assertThat(reload(delivery.getId()).getAttemptCount()).isEqualTo(1);
+        verifyNoInteractions(sender);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = RecoveryAction.class, names = {"CONFIRM_ACCEPTED", "CONFIRM_RETRYABLE_REJECTION", "CONFIRM_PERMANENT_REJECTION"})
+    void withdrawnUnknownCanBeReconciledButCannotBeRestarted(RecoveryAction action) {
+        Delivery delivery = create("Withdrawn uncertainty");
+        transactions().claim(delivery.getId(), now());
+        var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        reminders().withdrawReminder(reminder.getId(), reminder.getVersion());
+        var before = storedRows();
+        assertThatThrownBy(() -> transactions().recover(delivery.getId(), reload(delivery.getId()).getVersion(),
+                RecoveryAction.REPLACE_UNKNOWN, true)).isInstanceOf(RecoveryConflictException.class);
+        assertThat(storedRows()).isEqualTo(before);
+        transactions().recover(delivery.getId(), reload(delivery.getId()).getVersion(), action, false);
+        if (action == RecoveryAction.CONFIRM_ACCEPTED) {
+            transactions().recover(delivery.getId(), reload(delivery.getId()).getVersion(), RecoveryAction.FINALIZE, false);
+        }
+        boot();
+        clock.advance(Duration.ofDays(1));
+        pass();
+        assertThat(reload(delivery.getId()).getAttemptCount()).isEqualTo(1);
+        assertThat(reminderStatus(delivery)).isEqualTo(action == RecoveryAction.CONFIRM_ACCEPTED
+                ? ReminderStatus.SENT : ReminderStatus.PENDING);
+        assertThat(reload(delivery.getId()).getState().name()).isEqualTo(action.name().replace("CONFIRM_", ""));
+        verifyNoInteractions(sender);
     }
 
     @Test
@@ -251,37 +308,41 @@ class DeliveryRecoveryIntegrationTest {
         Delivery delivery = create("Preserve budget");
         when(sender.sendSms(any(), anyString(), anyString())).thenReturn(SmsSubmissionResult.retryableRejection());
         pass();
-        assertMutationsRefusedWithoutChanges(delivery);
+        assertEditRefusedWithoutChanges(delivery);
         clock.advance(Duration.ofMinutes(1));
         pass();
         clock.advance(Duration.ofMinutes(5));
         pass();
-        assertMutationsRefusedWithoutChanges(delivery);
+        assertEditRefusedWithoutChanges(delivery);
         transactions().recover(delivery.getId(), reload(delivery.getId()).getVersion(), RecoveryAction.RETRY_ONCE, false);
         pass();
         assertThat(reload(delivery.getId()).getAttemptCount()).isEqualTo(4);
         assertThat(reload(delivery.getId()).isExtraAttemptPermitted()).isFalse();
-        assertMutationsRefusedWithoutChanges(delivery);
+        assertEditRefusedWithoutChanges(delivery);
+        var exhaustedReminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
+        reminders().withdrawReminder(exhaustedReminder.getId(), exhaustedReminder.getVersion());
+        var withdrawn = storedRows();
+        assertThatThrownBy(() -> transactions().recover(delivery.getId(), reload(delivery.getId()).getVersion(),
+                RecoveryAction.RETRY_ONCE, false)).isInstanceOf(RecoveryConflictException.class);
+        assertThat(storedRows()).isEqualTo(withdrawn);
         boot();
         pass();
         verify(sender, times(4)).sendSms(eq(delivery.getId()), anyString(), anyString());
         Delivery permanent = create("Permanent");
         when(sender.sendSms(eq(permanent.getId()), anyString(), anyString())).thenReturn(SmsSubmissionResult.permanentRejection());
         pass();
-        assertMutationsRefusedWithoutChanges(permanent);
+        assertEditRefusedWithoutChanges(permanent);
         Delivery unknown = create("Uncertain");
         transactions().claim(unknown.getId(), now());
         boot();
-        assertMutationsRefusedWithoutChanges(unknown);
+        assertEditRefusedWithoutChanges(unknown);
     }
 
-    private void assertMutationsRefusedWithoutChanges(Delivery delivery) {
+    private void assertEditRefusedWithoutChanges(Delivery delivery) {
         var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
         var before = storedRows();
         assertThatThrownBy(() -> reminders().editReminder(reminder.getId(), new EditReminderRequest(
                 "Cannot reset", now().plusHours(1), reminder.getVersion())))
-                .isInstanceOf(ReminderMutationException.class);
-        assertThatThrownBy(() -> reminders().withdrawReminder(reminder.getId(), reminder.getVersion()))
                 .isInstanceOf(ReminderMutationException.class);
         assertThat(storedRows()).isEqualTo(before);
     }
@@ -353,7 +414,7 @@ class DeliveryRecoveryIntegrationTest {
         var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
         assertThat(reminder.getVersion()).isZero();
         assertThat(reminder.getWithdrawnAt()).isNull();
-        assertMutationsRefusedWithoutChanges(delivery);
+        assertEditRefusedWithoutChanges(delivery);
         UUID replacement = transactions().recover(delivery.getId(), reload(delivery.getId()).getVersion(),
                 RecoveryAction.REPLACE_UNKNOWN, true);
         assertThat(reload(replacement).getMessage()).isEqualTo(historic);

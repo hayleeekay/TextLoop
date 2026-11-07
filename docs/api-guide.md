@@ -79,7 +79,7 @@ The response includes the submitted fields plus:
 | `id` | integer | Server-assigned reminder identifier. |
 | `status` | string | Acceptance-tracking state: `PENDING` or `SENT`. New reminders start as `PENDING`. |
 | `version` | integer | Current reminder version. Copy it into `expectedVersion` when editing or withdrawing; do not assume a starting value. |
-| `withdrawnAt` | string (date-time) or null | Server-local withdrawal time. A non-null value means the alert was withdrawn, even though its status remains `PENDING`. |
+| `withdrawnAt` | string (date-time) or null | Server-local withdrawal time. A non-null value means no further attempts may start; any existing delivery outcome is retained. |
 
 **Storage:** Reminders are persisted in PostgreSQL's `reminders` table. The response
 contains selected fields rather than the complete database row. Delivery tracking
@@ -135,8 +135,9 @@ intent from sending, including after restart. Earlier snapshots stay unchanged.
 
 `POST /api/reminders/{id}/withdraw`
 
-Stop an alert before its first send claim, without deleting its saved records or
-marking anything complete.
+Remove a pending reminder from Home and stop further attempts, without deleting its
+saved records or marking anything complete. This also works for held, failed, and
+uncertain reminders. An attempt already in progress may still send.
 
 ```bash
 curl -i --request POST http://localhost:8080/api/reminders/42/withdraw \
@@ -150,19 +151,24 @@ The message, scheduled time, phone number, and delivery snapshot remain stored.
 
 ### Editing and withdrawal boundaries
 
-Both operations require an unwithdrawn `PENDING` reminder whose current delivery is
-`READY` and has never been claimed. They remain available after the scheduled time
-passes if no claim has happened. An edit still requires a new future time.
+Editing requires an unwithdrawn `PENDING` reminder whose current delivery is `READY`
+and has never been claimed. It remains available after the scheduled time passes if
+no claim has happened. An edit still requires a new future time.
 
-The send claim and corrections use the same database lock order. If the correction
-commits first, the obsolete alert cannot send. If the claim commits first, the
-correction conflicts; it cannot recall the attempt or prevent its outcome recording.
-Two corrections using one version have only one winner.
+Withdrawal requires an unwithdrawn `PENDING` reminder and its current version. It can
+stop future attempts in any delivery state, including missing or inconsistent delivery
+information, without changing that evidence. Sent and already withdrawn reminders are
+inactive and cannot be withdrawn again. The website offers Withdraw only on Home.
 
-Claimed, uncertain, rejected, accepted, sent, and withdrawn alerts cannot be edited
-or withdrawn through these endpoints. Ordinary corrections cannot clear an `UNKNOWN`
-hold, reset a used retry budget, or grant another attempt. Use the existing recovery
-procedure for delivery uncertainty. There is no ordinary undo-withdraw operation.
+Claims, edits, and withdrawal serialize on the reminder lock. If withdrawal commits
+first, no new attempt can claim it. If a claim commits first, that attempt may finish;
+its outcome is still recorded, and acceptance can still be finalized after restart.
+Withdrawal cannot recall a text already submitted. Two corrections using one version
+have only one winner.
+
+Withdrawal does not clear an `UNKNOWN` hold or reset a used retry budget. The source
+stays withdrawn even when a known result later permits Remind me again. There is no
+ordinary undo-withdraw operation.
 
 ### Mutation errors
 
@@ -212,10 +218,11 @@ Timezone suffixes and offsets are rejected, as with creation and editing.
 | `SENT`, including legacy records without a delivery | Yes, with current acceptance recorded when a delivery exists. |
 | Current delivery `ACCEPTED`, awaiting `SENT` finalization | Yes. Finalization cannot submit again. |
 | Withdrawn, never-claimed `READY` alert | Yes. The source stays withdrawn. |
-| Unwithdrawn `PENDING` with current `PERMANENT_REJECTION` | Yes. The old delivery cannot retry. |
+| `PENDING` with current `PERMANENT_REJECTION`, withdrawn or not | Yes. The old delivery cannot retry. |
 | Active `READY` alert, including overdue alerts | No. Edit or withdraw it first. |
 | `UNKNOWN` | No. Use [delivery review](delivery-recovery.md). |
-| Any `RETRYABLE_REJECTION`, including exhausted retries | No. Use delivery recovery; another attempt may remain or be granted. |
+| Withdrawn, confirmed `RETRYABLE_REJECTION`, including exhausted retries | Yes. Withdrawal prevents another attempt on the old delivery. |
+| Unwithdrawn `RETRYABLE_REJECTION`, including exhausted retries | No. Use delivery recovery; another attempt may remain or be granted. |
 | Untracked `PENDING` or inconsistent delivery state | No. |
 
 Success returns `200 OK` with a new reminder in the usual response format. Its
@@ -269,7 +276,8 @@ logging the phone number or rendered message. It does not send a real SMS.
 The scheduled time determines eligibility for processing, rather than an exact
 sending time. Delivery outcomes such as `UNKNOWN` and `ACCEPTED` are internal
 tracking states, not values of the API's `status` field. A non-null `withdrawnAt`
-prevents sending regardless of the retained `PENDING` status.
+prevents new attempts regardless of status. It does not erase an in-progress attempt
+or its result; a withdrawn reminder can later become `SENT` when acceptance finalizes.
 
 ### Retries and recovery
 
@@ -372,7 +380,7 @@ arrays, including `[]` when empty. Feedback describes the current alert:
 | `WAITING` | Submission has not begun. A past scheduled time does not mean it sent. |
 | `ACCEPTED` | Sender acceptance is recorded, possibly awaiting `SENT` finalization. This does not confirm handset delivery. |
 | `WITHDRAWN` | The never-claimed alert was withdrawn. |
-| `RETRY_WAITING` | Another attempt is permitted. `nextAttemptAt` is its earliest eligible time, not a promised send time. |
+| `RETRY_WAITING` | A retryable rejection was recorded. Unless withdrawn, another attempt is permitted; `nextAttemptAt` is its earliest eligible time, not a promised send time. |
 | `RETRY_EXHAUSTED` | The retry budget is used. Review delivery recovery before another attempt. |
 | `PERMANENT_REJECTION` | The sender rejected the submission. Remind me again can schedule a fresh alert. |
 | `DELIVERY_UNCERTAIN` | Submission outcome is unresolved. Use delivery review before scheduling again. |
@@ -382,7 +390,11 @@ arrays, including `[]` when empty. Feedback describes the current alert:
 Action flags describe the read snapshot; saves recheck eligibility under locks and
 may conflict. Use the returned `version` for edits, withdrawal, or a new reuse
 operation. A previously successful reuse operation can still be replayed even when
-`canRemindAgain` is now false. `nextAttemptAt` is null when no retry is permitted.
+`canRemindAgain` is now false. `nextAttemptAt` is null when no retry is permitted,
+including after withdrawal.
+Withdrawal is separate from delivery feedback: check `withdrawnAt` even when the
+feedback remains uncertain, rejected, or accepted. History includes these withdrawals
+while preserving their outcome details.
 
 Browsing, detail, and refresh create no deliveries, invoke no sending or legacy
 adoption, and change no statuses. Leaving a window preserves records and delivery

@@ -134,26 +134,24 @@ class ReminderMutationIntegrationTest {
     }
 
     @Test
-    void claimedAcceptedAndSentRemindersReturnNotEditableWithoutChangingEvidence() {
+    void claimedAcceptedAndSentRemindersCannotBeEdited() {
         ReminderResponse created = create();
         var deliveryId = reminders.findById(created.id()).orElseThrow().getCurrentDeliveryId();
         var attempt = transactions.claim(deliveryId, created.scheduledAt()).orElseThrow();
-        assertNotEditable(created.id());
+        assertEditRefused(created.id());
         transactions.recordResult(deliveryId, attempt.attemptCount(), SmsSubmissionResult.accepted(null));
-        assertNotEditable(created.id());
+        assertEditRefused(created.id());
         transactions.finalizeAccepted(deliveryId);
-        assertNotEditable(created.id());
+        assertEditRefused(created.id());
     }
 
-    private void assertNotEditable(Long id) {
+    private void assertEditRefused(Long id) {
         var saved = reminders.findById(id).orElseThrow();
         var delivery = deliveries.findById(saved.getCurrentDeliveryId()).orElseThrow();
-        for (boolean withdraw : List.of(false, true)) {
-            var response = mutate(id, withdraw, withdraw ? new WithdrawReminderRequest(saved.getVersion())
-                    : new EditReminderRequest("Refused", saved.getScheduledAt().plusHours(1), saved.getVersion()));
-            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-            assertThat(response.getBody()).isEqualTo("{\"code\":\"NOT_EDITABLE\"}");
-        }
+        var response = mutate(id, false,
+                new EditReminderRequest("Refused", saved.getScheduledAt().plusHours(1), saved.getVersion()));
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isEqualTo("{\"code\":\"NOT_EDITABLE\"}");
         var after = reminders.findById(id).orElseThrow();
         assertThat(after.getVersion()).isEqualTo(saved.getVersion());
         assertThat(after.getMessage()).isEqualTo(saved.getMessage());
@@ -257,7 +255,7 @@ class ReminderMutationIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    void mismatchedDeliveryOwnershipRefusesMutationWithoutChangingEitherReminder(boolean withdraw) {
+    void mismatchedDeliveryOwnershipBlocksEditingButAllowsWithdrawalWithoutChangingDeliveries(boolean withdraw) {
         ReminderResponse requested = create();
         ReminderResponse other = create();
         var otherDelivery = reminders.findById(other.id()).orElseThrow().getCurrentDeliveryId();
@@ -267,9 +265,17 @@ class ReminderMutationIntegrationTest {
 
         var response = mutate(requested.id(), withdraw, request(requested, withdraw));
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody()).isEqualTo("{\"code\":\"NOT_EDITABLE\"}");
-        assertThat(storedRows()).isEqualTo(before);
+        if (withdraw) {
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(reminders.findById(requested.id()).orElseThrow().getWithdrawnAt()).isNotNull();
+            assertThat(jdbc.queryForList("select * from deliveries order by id")).isEqualTo(before.get(1));
+            assertThat(reminders.findById(other.id()).orElseThrow().getWithdrawnAt()).isNull();
+            assertThat(reminders.findById(other.id()).orElseThrow().getVersion()).isEqualTo(other.version());
+        } else {
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+            assertThat(response.getBody()).isEqualTo("{\"code\":\"NOT_EDITABLE\"}");
+            assertThat(storedRows()).isEqualTo(before);
+        }
     }
 
     @ParameterizedTest

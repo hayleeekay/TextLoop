@@ -517,10 +517,15 @@ class ReminderReuseIntegrationTest {
                 Integer.class) >= count);
     }
 
-    // Hold only the delivery in the fixture so the real first transaction owns the source lock.
     private <T, U> List<Object> ordered(Reminder source, Supplier<T> first, Supplier<U> second) throws Exception {
+        return ordered(source, first, second, false);
+    }
+
+    private <T, U> List<Object> ordered(Reminder source, Supplier<T> first, Supplier<U> second, boolean holdReminder) throws Exception {
         var pending = transaction().execute(status -> {
-            deliveries().findLockedById(source.getCurrentDeliveryId()).orElseThrow();
+            // Withdrawal changes only the reminder, so its ordering fixture must hold that row.
+            if (holdReminder) reminders().findLockedById(source.getId()).orElseThrow();
+            else deliveries().findLockedById(source.getCurrentDeliveryId()).orElseThrow();
             var a = CompletableFuture.supplyAsync(first);
             awaitLocks(1);
             var b = CompletableFuture.supplyAsync(second);
@@ -543,7 +548,7 @@ class ReminderReuseIntegrationTest {
             default -> throw new IllegalArgumentException(action);
         };
         Supplier<?> reuse = () -> raw(source.getId(), request);
-        var results = mutationFirst ? ordered(source, mutation, reuse) : ordered(source, reuse, mutation);
+        var results = mutationFirst ? ordered(source, mutation, reuse, action.equals("withdraw")) : ordered(source, reuse, mutation);
         @SuppressWarnings("unchecked") var response = (ResponseEntity<String>) results.get(mutationFirst ? 1 : 0);
         assertError(response, HttpStatus.CONFLICT, mutationFirst
                 ? (action.equals("claim") ? "DELIVERY_REVIEW_REQUIRED" : "STALE_VERSION") : "NOT_REUSABLE");

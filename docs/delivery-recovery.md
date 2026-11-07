@@ -68,13 +68,15 @@ Other actions use the same delivery, version, and stopped-application options:
 Missing logs, elapsed time, or an absent callback are not evidence of non-acceptance.
 A replacement creates a linked new delivery ID with the original payload snapshot;
 the original uncertainty is preserved. All writes require the expected version and
-current pending intent on an unwithdrawn reminder. Stale, withdrawn, or inactive
-intents are refused. Do not reset reminder status or edit delivery rows by hand to
-bypass these checks.
+current pending intent. Stale or obsolete intents are refused. For withdrawn reminders,
+outcome confirmation and acceptance finalization remain available, but `retry-once`
+and `replace-unknown` are refused. Confirmation never reactivates the withdrawn alert.
+Do not reset reminder status or edit delivery rows by hand to bypass these checks.
 
 Retries preserve the intended delivery ID. A future snooze must create a new intent;
-text snooze/cancel behavior is not implemented here. The HTTP API supports withdrawal
-only before the first claim; it cannot change a claimed or held delivery. Separate
+text snooze/cancel behavior is not implemented here. The HTTP API can withdraw a
+pending reminder even after a claim or failure. Withdrawal stops new attempts without
+erasing uncertainty or preventing an in-progress result from being recorded. Separate
 commits protect recorded acceptance from a later reminder-update failure. They do not guarantee exactly-once
 external SMS. Real-provider mapping, reconciliation, and retry protections still need
 provider-specific verification before real SMS is enabled.

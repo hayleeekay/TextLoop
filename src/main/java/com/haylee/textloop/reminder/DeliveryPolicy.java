@@ -17,12 +17,12 @@ final class DeliveryPolicy {
         if (!delivery.getId().equals(reminder.getCurrentDeliveryId())) {
             return false;
         }
-        if (reminder.getWithdrawnAt() != null) {
-            return reminder.getStatus() == ReminderStatus.PENDING && editable(delivery);
-        }
-        return delivery.getState() == DeliveryState.ACCEPTED
-                || (reminder.getStatus() == ReminderStatus.PENDING
-                    && delivery.getState() == DeliveryState.PERMANENT_REJECTION);
+        if (delivery.getState() == DeliveryState.ACCEPTED) return true;
+        if (reminder.getStatus() != ReminderStatus.PENDING) return false;
+        if (delivery.getState() == DeliveryState.PERMANENT_REJECTION) return true;
+        return reminder.getWithdrawnAt() != null
+                && (editable(delivery) || (delivery.getState() == DeliveryState.RETRYABLE_REJECTION
+                    && (delivery.getNextAttemptAt() != null || exhausted(delivery))));
     }
 
     static boolean eligible(Delivery delivery, LocalDateTime now) {
@@ -54,8 +54,9 @@ final class DeliveryPolicy {
             case FINALIZE -> delivery.getState() == DeliveryState.ACCEPTED;
             case CONFIRM_ACCEPTED, CONFIRM_RETRYABLE_REJECTION, CONFIRM_PERMANENT_REJECTION ->
                 delivery.getState() == DeliveryState.UNKNOWN;
-            case RETRY_ONCE -> exhausted(delivery);
-            case REPLACE_UNKNOWN -> delivery.getState() == DeliveryState.UNKNOWN && acknowledgeDuplicateRisk;
+            case RETRY_ONCE -> delivery.getReminder().getWithdrawnAt() == null && exhausted(delivery);
+            case REPLACE_UNKNOWN -> delivery.getReminder().getWithdrawnAt() == null
+                    && delivery.getState() == DeliveryState.UNKNOWN && acknowledgeDuplicateRisk;
         };
         if (!allowed) {
             throw new RecoveryConflictException();
