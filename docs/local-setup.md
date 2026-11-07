@@ -33,7 +33,7 @@ Run this command, then type a local database password and press Enter. The passw
 will not be displayed or included in the command history:
 
 ```sh
-read -r -s DB_PASSWORD
+IFS= read -r -s DB_PASSWORD
 ```
 
 Then create the database container:
