@@ -167,6 +167,10 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('editor').setAttribute('aria-labelledby', isComposer() ? 'conversation-title' : 'editor-title');
   $('back').hidden = isComposer();
   $('edit-heading').hidden = isComposer();
+  if (nextMode === 'edit') {
+    $('editor-title').textContent = 'Edit reminder';
+    $('editor-help').textContent = 'Make a change before this alert sends.';
+  }
   $('conversation').hidden = !isComposer();
   $('time-toggle').hidden = !isComposer();
   $('time-presets').hidden = !isComposer();
