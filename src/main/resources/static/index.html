@@ -17,14 +17,11 @@
       <button id="history-tab" type="button" data-navigation>History</button>
       <button id="settings-tab" type="button" data-navigation>Settings</button>
     </nav>
-    <button id="refresh" type="button" class="quiet" aria-label="Refresh" title="Refresh reminders">
-      <span class="refresh-label" aria-hidden="true">Refresh</span>
-      <span class="refresh-icon" aria-hidden="true">↻</span>
-    </button>
   </div>
 </header>
 <main>
   <p id="notice" role="status" aria-live="polite"></p>
+  <p id="toast" role="status"></p>
   <section id="saved-retry" hidden aria-label="Unconfirmed save"></section>
   <section id="editor" hidden aria-labelledby="editor-title">
     <button id="back" type="button" class="quiet back">Back to reminders</button>
@@ -46,7 +43,7 @@
         <legend class="sr-only">Reminder details</legend>
         <div id="send-later">
           <button id="time-toggle" type="button" aria-controls="time-fields" aria-expanded="false">
-            <strong>Send later</strong><span id="time-preview">Choose time</span>
+            <span aria-hidden="true">◷</span><span id="time-preview">Choose send time</span><span aria-hidden="true">›</span>
           </button>
           <div id="time-fields">
             <div id="time-presets" class="actions">

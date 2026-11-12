@@ -34,8 +34,6 @@ header { border-bottom: 1px solid var(--line); background: var(--surface); }
 nav { display: flex; flex-wrap: wrap; gap: .25rem; }
 nav button { background: transparent; border-color: transparent; color: var(--soft); }
 nav button[aria-current="page"] { background: var(--lilac); color: var(--ink); }
-#refresh { margin-inline-start: auto; }
-.refresh-icon { display: none; }
 main {
   width: 100%; max-width: 54rem; margin: 1rem auto; padding: 0 1.25rem;
   flex: 1; display: flex; flex-direction: column;
@@ -72,7 +70,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 #upcoming ul, #history ul { display: grid; gap: .5rem; }
 .schedule-group + .schedule-group { margin-top: 1rem; }
 .schedule-group > h2 { margin-bottom: .4rem; color: var(--soft); }
-.schedule-group:first-child .reminder-card[data-feedback="WAITING"] { background: var(--peach); }
+.schedule-group:first-child .reminder-card[data-feedback="WAITING"] { background: var(--surface); }
 .reminder-card[data-feedback="WAITING"] { background: color-mix(in srgb, var(--lilac) 58%, var(--surface)); }
 #history .reminder-card {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .35rem .65rem;
@@ -94,6 +92,11 @@ summary { cursor: pointer; color: var(--soft); }
 .saved-details p + p { margin-top: .35rem; }
 .empty { padding: 1.2rem 0; }
 .empty h2 { margin-bottom: .35rem; }
+#history .empty {
+  padding: 2rem 1rem; border: 1px solid var(--line); border-radius: .85rem;
+  background: var(--surface); text-align: center;
+}
+#history .empty h2 { margin: 0; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 label { display: block; margin: .7rem 0 .3rem; font-weight: 600; }
 input, textarea, select {
@@ -136,22 +139,35 @@ textarea { resize: vertical; }
   position: sticky; bottom: 0; z-index: 1; border: 0; border-top: 1px solid var(--line);
   padding: .65rem 1rem; border-radius: 0 0 1.35rem 1.35rem; background: var(--paper);
 }
-.composer fieldset { max-width: 40rem; margin-inline: auto; }
-.composer #send-later { border: 1px solid var(--line); border-radius: .75rem; background: var(--lilac); }
-#time-toggle {
-  display: flex; align-items: center; justify-content: space-between; gap: .5rem; width: 100%;
-  text-align: left; border: 0; background: transparent;
+.composer fieldset {
+  max-width: 40rem; margin-inline: auto; padding: .35rem;
+  border: 1px solid var(--control); border-radius: 1.25rem; background: var(--surface);
 }
-#time-preview { color: var(--soft); font-size: .875rem; }
-.composer #time-fields { padding: 0 .65rem .65rem; }
+#time-toggle {
+  display: flex; align-items: center; gap: .4rem; max-width: 100%; text-align: left;
+  border: 1px dashed var(--control); background: var(--lilac);
+}
+#time-preview { font-size: .875rem; }
+.composer #time-fields { padding: .25rem .35rem .55rem; }
 #time-presets { margin-top: .2rem; }
-.composer .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; align-items: end; margin-top: .5rem; }
+.composer .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem; align-items: end; margin-top: .25rem; }
 .composer .message-input label, .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.composer textarea { min-height: 2.75rem; max-height: 9rem; border-radius: 1.1rem; }
+.composer textarea {
+  min-height: 2.75rem; max-height: clamp(2.75rem, 35dvh, 12rem); padding: .625rem;
+  border: 0; border-radius: .75rem; resize: none; overflow-y: auto;
+}
 .composer #save { min-width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
 .composer .form-actions { justify-content: end; margin-top: .3rem; }
 #editor:not(.composer) #save { margin-top: .5rem; }
 #notice:empty, #form-feedback:empty { display: none; }
+#toast {
+  position: fixed; z-index: 2; inset-block-start: 4.25rem; inset-inline-end: 1rem;
+  max-width: calc(100% - 2rem); pointer-events: none;
+}
+#toast:not(:empty) {
+  padding: .65rem .9rem; border: 1px solid var(--line); border-radius: .7rem;
+  background: var(--surface); box-shadow: 0 .2rem .8rem color-mix(in srgb, var(--ink) 18%, transparent);
+}
 #notice, #form-feedback, #saved-retry { padding: .65rem .85rem; background: var(--lilac); border-radius: .6rem; margin-bottom: .8rem; overflow-wrap: anywhere; }
 #form-feedback { margin-top: .8rem; background: var(--butter); color: var(--warn); }
 #form-feedback button, #saved-retry .actions { margin-top: .55rem; }
@@ -166,9 +182,6 @@ footer { margin-top: auto; padding-top: 1rem; color: var(--soft); font-size: .8r
   .brand { display: none; }
   nav { gap: 0; }
   nav button { min-width: 2.75rem; font-size: .8125rem; padding-inline: .3rem; }
-  #refresh { min-width: 2.75rem; padding: 0; }
-  .refresh-label { display: none; }
-  .refresh-icon { display: inline; font-size: 1.25rem; }
   .panel, .reminder-card { padding: .75rem; }
   .composer .panel { padding-inline: .65rem; }
 }

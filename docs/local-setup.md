@@ -80,8 +80,8 @@ to this computer; it currently has no authentication.
    number `+12035550100`. You can change it in **Settings**.
 2. Open **Send later**, choose a time a few minutes ahead, and tap the arrow.
 3. Open **Schedule** to edit the reminder before sending begins or withdraw it.
-4. For a reminder left scheduled, wait until it is due, then choose **Refresh** after
-   the next scheduler check. Checks run every minute while the app is running.
+4. For a reminder left scheduled, wait until it is due. The server checks every
+   minute, and the page updates while it is open.
 5. Find it in **History**, which shows sent and withdrawn reminders for seven days.
    **Again** copies the text into Messages, where you can edit it and choose a new time.
 

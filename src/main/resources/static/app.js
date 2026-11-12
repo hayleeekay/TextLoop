@@ -24,6 +24,7 @@ let draftBeforeReuse = null;
 let editFromMessages = false;
 let recipient = preference('textloop.recipient', demoNumber);
 const loaded = { upcoming: null, history: null };
+let toastTimer;
 
 function preference(key, fallback) {
   try { return localStorage.getItem(key) || fallback; }
@@ -50,6 +51,11 @@ function button(text, action) {
 }
 
 function notice(text) { $('notice').textContent = text; }
+function toast(text, duration = 0) {
+  clearTimeout(toastTimer);
+  $('toast').textContent = text;
+  if (duration) toastTimer = setTimeout(() => toast(''), duration);
+}
 function localTime(value) { return value.replace('T', ' '); }
 function newSchedule(value) { return value.length === 16 ? value + ':00' : value; }
 
@@ -129,7 +135,16 @@ function showTimeFields(open) {
 
 function updateTimePreview() {
   const value = $('scheduled-at').value;
-  $('time-preview').textContent = value ? displayTime(value) : 'Choose time';
+  $('time-preview').textContent = value ? displayTime(value) : 'Choose send time';
+}
+
+function resizeMessage() {
+  const field = $('message');
+  field.style.height = '';
+  if (isComposer() && field.clientWidth) {
+    field.style.height = '0px';
+    field.style.height = field.scrollHeight + 'px';
+  }
 }
 
 function rememberComposer() {
@@ -179,6 +194,7 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('draft-recipient').textContent = nextMode === 'reuse' ? 'Uses the original number: ' + reminder.phoneNumber : '';
   $('draft-actions').hidden = nextMode === 'create';
   $('message').value = draft.text ?? reminder?.message ?? '';
+  resizeMessage();
   originalMessageDisplay = draft.originalMessageDisplay ?? $('message').value;
   $('scheduled-at').value = draft.time ?? (nextMode === 'edit' ? reminder.scheduledAt.slice(0, 16) : '');
   $('time-help').textContent = nextMode === 'edit'
@@ -420,12 +436,12 @@ function renderThread() {
   if (!visible.length && loaded.upcoming && loaded.history) thread.append(node('li', 'No messages yet.', 'hint thread-empty'));
 }
 
-async function refreshList(name) {
+async function refreshList(name, background = false) {
   const read = ++listReads[name];
   const target = $(name);
-  const expanded = new Set([...target.querySelectorAll('details[open]')].map((item) => item.dataset.reminderId));
-  target.replaceChildren(node('p', 'Loading...'));
-  target.setAttribute('aria-busy', 'true');
+  if (!background) {
+    target.setAttribute('aria-busy', 'true');
+  }
   try {
     const reminders = await request(name === 'upcoming' ? '/home' : '/history');
     if (!Array.isArray(reminders)) throw {};
@@ -433,22 +449,35 @@ async function refreshList(name) {
     for (const reminder of reminders) {
       if (!isReminder(reminder)) throw {};
     }
+    if (background && (saving || target.contains(document.activeElement)
+      || $('thread').contains(document.activeElement) || JSON.stringify(loaded[name]) === JSON.stringify(reminders))) {
+      return true;
+    }
+    const expanded = new Set([...target.querySelectorAll('details[open]')].map((item) => item.dataset.reminderId));
     loaded[name] = reminders;
     renderThread();
     const list = name === 'upcoming' ? renderSchedule(reminders, expanded) : node('ul');
     if (name === 'history') for (const reminder of reminders) list.append(renderCard(reminder, name, expanded));
     const empty = node('div', undefined, 'empty');
-    empty.append(node('h2', name === 'upcoming' ? 'No reminders waiting' : 'No history in the last 7 days'),
-      node('p', name === 'upcoming' ? 'Schedule a text whenever you need a reminder.' : 'Sent and withdrawn reminders appear here for 7 days.', 'hint'));
+    empty.append(node('h2', name === 'upcoming' ? 'No reminders waiting' : 'Nothing here yet.'));
+    if (name === 'upcoming') empty.append(node('p', 'Schedule a text whenever you need a reminder.', 'hint'));
     target.replaceChildren(reminders.length ? list : empty);
     controls();
     return true;
   } catch {
-    if (read === listReads[name]) target.replaceChildren(node('p', 'Could not load reminders.'), button('Try again', () => refreshList(name)));
+    if (!background && loaded[name] === null && read === listReads[name]) {
+      target.replaceChildren(node('p', 'Could not load reminders.'), button('Try again', () => refreshList(name)));
+    }
     return false;
   } finally {
     if (read === listReads[name]) target.removeAttribute('aria-busy');
   }
+}
+
+function refreshInBackground() {
+  if (document.hidden || saving || uncertainCreate || document.querySelector('#upcoming[aria-busy], #history[aria-busy]')) return;
+  void refreshList('upcoming', true);
+  void refreshList('history', true);
 }
 
 async function refreshLists() {
@@ -615,12 +644,13 @@ async function mutate(kind, id, body) {
   saving = true;
   ++detailRead;
   controls();
-  notice('Saving...');
+  notice('');
+  toast('Saving…');
   try {
     await request(kind === 'create' ? '' : '/' + id + (kind === 'edit' ? '' : kind === 'reuse' ? '/remind-again' : '/withdraw'),
       kind === 'edit' ? 'PUT' : 'POST', body);
   } catch (failure) {
-    notice('');
+    toast('');
     // A definitive refusal cannot have committed this request. A key conflict needs manual review.
     if (kind === 'reuse' && failure.status >= 400 && failure.status < 500 && failure.code !== 'OPERATION_CONFLICT') clearRetry();
     mutationError(kind, failure);
@@ -639,11 +669,16 @@ async function mutate(kind, id, body) {
     showBrowse(kind === 'withdraw' ? 'history' : 'upcoming', true);
   }
   const savedText = kind === 'withdraw' ? 'Reminder withdrawn.' : kind === 'edit' ? 'Changes saved.' : 'Reminder scheduled.';
-  notice(savedText);
+  toast(savedText, 4000);
   await refreshLists();
 }
 
-form.addEventListener('input', () => { dirty = true; ++detailRead; updateTimePreview(); });
+form.addEventListener('input', (event) => {
+  dirty = true;
+  ++detailRead;
+  updateTimePreview();
+  if (event.target === $('message')) resizeMessage();
+});
 form.addEventListener('invalid', (event) => {
   if (event.target === $('scheduled-at')) showTimeFields(true);
 }, true);
@@ -720,7 +755,9 @@ $('theme').addEventListener('change', () => {
   document.documentElement.dataset.theme = $('theme').value;
   setPreference('textloop.theme', $('theme').value);
 });
-$('refresh').addEventListener('click', () => refreshLists());
+window.addEventListener('resize', resizeMessage);
+document.addEventListener('visibilitychange', refreshInBackground);
+setInterval(refreshInBackground, 60000);
 window.addEventListener('beforeunload', (event) => {
   if (saving || uncertainCreate || dirty || composerDraft.dirty || draftBeforeReuse?.dirty) {
     event.preventDefault(); event.returnValue = '';
