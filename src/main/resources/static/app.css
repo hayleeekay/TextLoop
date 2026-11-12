@@ -20,7 +20,10 @@
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
-body { margin: 0; }
+body {
+  min-height: 100vh; min-height: 100dvh; margin: 0;
+  display: flex; flex-direction: column;
+}
 header { border-bottom: 1px solid var(--line); background: var(--surface); }
 .header-inner {
   max-width: 54rem; margin: auto; padding: .5rem 1.25rem;
@@ -33,7 +36,10 @@ nav button { background: transparent; border-color: transparent; color: var(--so
 nav button[aria-current="page"] { background: var(--lilac); color: var(--ink); }
 #refresh { margin-inline-start: auto; }
 .refresh-icon { display: none; }
-main { max-width: 54rem; margin: 1rem auto; padding: 0 1.25rem; }
+main {
+  width: 100%; max-width: 54rem; margin: 1rem auto; padding: 0 1.25rem;
+  flex: 1; display: flex; flex-direction: column;
+}
 h1, h2 { line-height: 1.25; margin: 0; }
 h1 { font: 400 clamp(1.9rem, 4vw, 2.65rem)/1.15 Georgia, serif; }
 h2 { font-size: 1.05rem; font-weight: 650; }
@@ -98,11 +104,11 @@ textarea { resize: vertical; }
 #time-help { margin-top: .35rem; }
 .form-actions { margin-top: .75rem; }
 .back { margin-bottom: .7rem; }
-.settings { max-width: 33rem; margin-inline: auto; }
+.settings { width: min(100%, 33rem); margin-inline: auto; }
 .settings form { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: 1rem; }
 .settings .hint { margin: .4rem 0 .65rem; }
 .composer {
-  min-height: min(36rem, calc(100svh - 9rem)); display: flex; flex-direction: column;
+  flex: 1 0 auto; display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: 1.35rem; background: var(--surface);
 }
 .contact {
@@ -152,7 +158,7 @@ textarea { resize: vertical; }
 #detail { margin: 1rem 0; padding: .8rem 0; border-block: 1px solid var(--line); }
 #detail h2 { margin-bottom: .5rem; }
 #detail p + p { margin-top: .3rem; }
-footer { margin-top: 1rem; color: var(--soft); font-size: .8rem; }
+footer { margin-top: auto; padding-top: 1rem; color: var(--soft); font-size: .8rem; }
 [hidden] { display: none !important; }
 @media (max-width: 38rem) {
   main { padding-inline: .7rem; }
