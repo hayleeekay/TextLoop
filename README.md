@@ -17,6 +17,9 @@ even started asking friends to use the `Send Later` iMessage feature for reminde
 which is where this idea came from. Bottom line: I'm far more likely to consider a
 text than a traditional notification.
 
+I want that same feeling in a little web app. I'd like to schedule a text to my
+future self from my phone or laptop and get it on my own phone, iPhone or Android.
+
 ## Status
 
 TextLoop is in development, with a working local web app and simulated sending.
