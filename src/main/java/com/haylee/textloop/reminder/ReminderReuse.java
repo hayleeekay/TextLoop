@@ -1,6 +1,7 @@
 package com.haylee.textloop.reminder;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.hibernate.annotations.OnDelete;
@@ -39,6 +40,9 @@ public class ReminderReuse {
     @Column(nullable = false, updatable = false)
     private LocalDateTime scheduledAt;
 
+    @Column(length = ReminderLimits.MESSAGE_MAX_LENGTH, updatable = false)
+    private String requestedMessage;
+
     @ManyToOne(optional = false)
     @JoinColumn(name = "result_reminder_id", nullable = false, updatable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
@@ -46,16 +50,19 @@ public class ReminderReuse {
 
     protected ReminderReuse() {}
 
-    ReminderReuse(Reminder source, UUID operationId, long expectedVersion, LocalDateTime scheduledAt, Reminder result) {
+    ReminderReuse(Reminder source, UUID operationId, long expectedVersion, LocalDateTime scheduledAt,
+            String requestedMessage, Reminder result) {
         this.sourceReminder = source;
         this.operationId = operationId;
         this.expectedVersion = expectedVersion;
         this.scheduledAt = scheduledAt;
+        this.requestedMessage = requestedMessage;
         this.resultReminder = result;
     }
 
-    boolean matches(long expectedVersion, LocalDateTime scheduledAt) {
-        return this.expectedVersion == expectedVersion && this.scheduledAt.equals(scheduledAt);
+    boolean matches(long expectedVersion, LocalDateTime scheduledAt, String requestedMessage) {
+        return this.expectedVersion == expectedVersion && this.scheduledAt.equals(scheduledAt)
+                && Objects.equals(this.requestedMessage, requestedMessage);
     }
 
     Reminder getResultReminder() {
