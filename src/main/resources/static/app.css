@@ -106,10 +106,10 @@ button:disabled { opacity: .6; cursor: default; }
 .heading { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1rem; }
 .heading .hint { margin-top: .35rem; }
 .browse-heading {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem .75rem;
+  flex-wrap: wrap; gap: .35rem .75rem;
   padding: .85rem 1rem; background: var(--accent); border-radius: 1rem 1rem 1rem .25rem;
 }
-.browse-heading .hint { grid-column: 1 / -1; margin: 0; }
+.browse-heading .hint { flex-basis: 100%; margin: 0; }
 .browse-heading .hint:empty { display: none; }
 #new-reminder { white-space: nowrap; }
 .hint { color: var(--soft); font-size: .875rem; }
