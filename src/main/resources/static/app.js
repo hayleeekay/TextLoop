@@ -209,17 +209,7 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
     closeEditDialog();
   }
   form.hidden = false;
-  $('cancel').hidden = nextMode === 'create';
-  $('cancel').setAttribute('aria-label', nextMode === 'edit' ? 'Cancel edit' : 'Cancel reuse');
-  $('message-label').textContent = nextMode === 'edit' ? 'Edit message' : 'Message';
-  $('message').value = draft.text ?? reminder?.message ?? '';
-  originalMessageDisplay = draft.originalMessageDisplay ?? $('message').value;
-  const [date, time] = (nextMode === 'edit' ? reminder.scheduledAt.slice(0, 16)
-    : nextMode === 'create' ? tomorrowMorning() : '').split('T');
-  $('send-date').value = draft.date ?? date;
-  $('send-time').value = draft.time ?? time ?? '';
-  $('save').textContent = nextMode === 'edit' ? '✓' : '↑';
-  $('save').setAttribute('aria-label', nextMode === 'edit' ? 'Save changes' : 'Schedule text');
+  fillComposer(nextMode, reminder, draft);
   if (nextMode === 'create') {
     navigation('messages-tab');
   } else {
@@ -238,6 +228,20 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
     const target = nextMode === 'reuse' ? 'send-date' : nextMode === 'create' ? 'conversation-title' : 'message';
     $(target).focus();
   }
+}
+
+function fillComposer(nextMode, reminder, draft) {
+  $('cancel').hidden = nextMode === 'create';
+  $('cancel').setAttribute('aria-label', nextMode === 'edit' ? 'Cancel edit' : 'Cancel reuse');
+  $('message-label').textContent = nextMode === 'edit' ? 'Edit message' : 'Message';
+  $('message').value = draft.text ?? reminder?.message ?? '';
+  originalMessageDisplay = draft.originalMessageDisplay ?? $('message').value;
+  const [date, time] = (nextMode === 'edit' ? reminder.scheduledAt.slice(0, 16)
+    : nextMode === 'create' ? tomorrowMorning() : '').split('T');
+  $('send-date').value = draft.date ?? date;
+  $('send-time').value = draft.time ?? time ?? '';
+  $('save').textContent = nextMode === 'edit' ? '✓' : '↑';
+  $('save').setAttribute('aria-label', nextMode === 'edit' ? 'Save changes' : 'Schedule text');
 }
 
 function openMessages() {
@@ -273,6 +277,7 @@ function closeEditDialog() {
   if (!editDialog.open) return;
   editDialog.close();
   editDialog.classList.remove('closing', 'from-composer');
+  editDialog.style.removeProperty('--dock-width');
   $('editor').append(form);
   $('composer-space').hidden = true;
   $('toast').before($('notice'));
@@ -322,13 +327,32 @@ async function finishDialog() {
   controls();
   let transition;
   if (allowMotion.matches) {
+    const fields = $('fields');
+    const startY = fields.getBoundingClientRect().top;
     const { opacity, transform } = getComputedStyle(editSurface);
     const current = { opacity, transform };
     editSurface.getAnimations().forEach((animation) => animation.cancel());
-    const offset = composerOffset();
-    transition = editSurface.animate([current, {
-      opacity: offset === null ? 0 : 1, transform: `translateY(${offset ?? 6}px)`
-    }], { duration: offset === null ? 260 : 380, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    if (composerOffset() !== null) {
+      const values = [$('send-date'), $('send-time'), $('message')];
+      const fade = values.map((input) => input.animate([{ color: 'transparent' }],
+        { duration: 90, fill: 'forwards' }));
+      const hold = editSurface.animate([current, current], { duration: 90, fill: 'forwards' });
+      await hold.finished.catch(() => {});
+      hold.cancel();
+      fillComposer('create', null, composerDraft);
+      resizeMessage();
+      const start = startY - fields.getBoundingClientRect().top;
+      const end = composerOffset() ?? start;
+      transition = editSurface.animate([
+        { transform: `translateY(${start}px)` }, { transform: `translateY(${end}px)` }
+      ], { duration: 380, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+      fade.forEach((animation) => animation.cancel());
+      values.forEach((input) => input.animate([{ color: 'transparent' }, { color: getComputedStyle(input).color }],
+        { duration: 140 }));
+    } else {
+      transition = editSurface.animate([current, { opacity: 0, transform: 'translateY(6px)' }],
+        { duration: 260, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    }
     await transition.finished.catch(() => {});
   }
   finishComposer();
@@ -445,6 +469,7 @@ async function openAction(nextMode, id) {
       rememberComposer();
       if (!$('editor').hidden) {
         const space = $('composer-space');
+        editDialog.style.setProperty('--dock-width', $('fields').getBoundingClientRect().width + 'px');
         space.style.height = form.getBoundingClientRect().height + 'px';
         space.style.paddingTop = $('fields').getBoundingClientRect().top - form.getBoundingClientRect().top + 'px';
         space.hidden = false;

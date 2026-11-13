@@ -106,6 +106,7 @@ button:disabled { opacity: .6; cursor: default; }
   outline: none;
   box-shadow: inset 0 -2px currentColor;
 }
+#reminder-form :is(input, textarea):focus-visible { box-shadow: none; }
 @media (forced-colors: active) {
   :focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
 }
@@ -274,6 +275,7 @@ textarea { resize: vertical; }
   border-radius: 1rem; background: var(--paper); resize: none; overflow-y: auto;
 }
 #message::placeholder { color: var(--soft); opacity: 1; }
+#edit-dialog.closing #message::placeholder { color: currentColor; opacity: .72; }
 :is(#save, #cancel) { width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
 #cancel { background: var(--card); border-color: var(--control); }
 #cancel:hover { background: var(--hover); }
@@ -282,7 +284,7 @@ textarea { resize: vertical; }
   padding: 0; border: 0; background: transparent; color: var(--ink); overscroll-behavior: contain;
   overflow: visible;
 }
-#edit-dialog.from-composer { width: min(41.5rem, calc(100% - 1.5rem)); }
+#edit-dialog.from-composer { width: min(calc(var(--dock-width) + 1.5rem + 2px), calc(100% - 1rem)); }
 #edit-surface {
   max-height: calc(100dvh - 1.5rem); overflow: auto;
   padding: .75rem; border: 1px solid var(--line); border-radius: 1.25rem;
