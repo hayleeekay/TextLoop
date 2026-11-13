@@ -222,15 +222,24 @@ textarea { resize: vertical; }
 .time-inputs { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: .5rem; }
 .time-inputs label { min-width: 0; margin: 0; font-size: .8125rem; }
 .time-inputs input { margin-top: .15rem; padding-inline: .35rem; font-size: 1rem; font-weight: 500; }
+.composer .time-inputs {
+  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
+  gap: .65rem;
+  padding: 0 .65rem;
+  border-radius: .75rem;
+  background: var(--card);
+}
 .composer .time-inputs label {
   display: flex; flex-wrap: wrap; align-items: center; column-gap: .4rem;
-  padding-inline: .55rem; color: var(--soft);
+  color: var(--soft);
 }
 .composer .time-inputs input {
   width: auto; max-width: 100%; margin-top: 0; border: 0; background: transparent;
   padding: .25rem 0; color: var(--ink);
 }
-.composer .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-top: .3rem; }
+.composer .time-inputs input::-webkit-datetime-edit { padding: 0; }
+.composer .time-inputs input::-webkit-calendar-picker-indicator { order: -1; margin-inline: 0 .35rem; }
+.composer .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-top: .45rem; }
 .composer .message-input label, .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .composer textarea {
   min-height: 2.75rem; max-height: clamp(2.75rem, 35dvh, 12rem); padding: .625rem .85rem;
