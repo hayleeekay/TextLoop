@@ -303,16 +303,25 @@ function composerOffset() {
 }
 
 const dockedSurface = {
-  backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: '0px'
+  backgroundColor: 'transparent', borderColor: 'transparent'
 };
+
+function composerSurfaceColors() {
+  const { backgroundColor, borderColor } = getComputedStyle(editSurface);
+  return { backgroundColor, borderColor };
+}
 
 function animateComposer() {
   if (!allowMotion.matches) return;
   const offset = composerOffset();
-  const start = offset === null ? { opacity: 0 } : { opacity: 1, ...dockedSurface };
-  editSurface.animate(
-    [{ ...start, transform: `translateY(${offset ?? 10}px)` }, { opacity: 1, transform: 'none' }],
-    { duration: offset === null ? 320 : 460, easing: 'cubic-bezier(.4,0,.2,1)' });
+  const frames = offset === null
+    ? [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }]
+    : [
+      { ...dockedSurface, transform: `translateY(${offset}px)` },
+      { ...composerSurfaceColors(), offset: .08 },
+      { transform: 'none' }
+    ];
+  editSurface.animate(frames, { duration: offset === null ? 320 : 460, easing: 'cubic-bezier(.4,0,.2,1)' });
 }
 
 function focusEditedMessage(id) {
@@ -334,8 +343,8 @@ async function finishDialog() {
   if (allowMotion.matches) {
     const fields = $('fields');
     const startY = fields.getBoundingClientRect().top;
-    const { opacity, transform, backgroundColor, borderColor, borderRadius } = getComputedStyle(editSurface);
-    const frame = { backgroundColor, borderColor, borderRadius };
+    const { opacity, transform } = getComputedStyle(editSurface);
+    const frame = composerSurfaceColors();
     const current = { ...frame, opacity, transform };
     editSurface.getAnimations().forEach((animation) => animation.cancel());
     if (composerOffset() !== null) {
@@ -351,6 +360,7 @@ async function finishDialog() {
       const end = composerOffset() ?? start;
       transition = editSurface.animate([
         { ...frame, transform: `translateY(${start}px)` },
+        { ...frame, offset: .92 },
         { ...dockedSurface, transform: `translateY(${end}px)` }
       ], { duration: 380, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
       fade.forEach((animation) => animation.cancel());

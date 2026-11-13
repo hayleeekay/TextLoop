@@ -294,6 +294,10 @@ textarea { resize: vertical; }
 @media (prefers-reduced-motion: no-preference) {
   #edit-dialog::backdrop { transition: opacity 320ms ease; }
   #edit-dialog.closing::backdrop { opacity: 0; transition-duration: 260ms; }
+  #edit-dialog.from-composer::backdrop {
+    transition-duration: 460ms; transition-timing-function: cubic-bezier(.4, 0, .2, 1);
+  }
+  #edit-dialog.from-composer.closing::backdrop { transition-duration: 380ms; transition-delay: 90ms; }
   @starting-style {
     #edit-dialog[open]::backdrop { opacity: 0; }
   }
