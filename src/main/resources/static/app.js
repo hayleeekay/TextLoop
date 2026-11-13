@@ -423,17 +423,29 @@ function renderThread() {
     const bubble = node('p', reminder.message, 'message bubble');
     if (reminder.feedback === 'WAITING') bubble.classList.add('scheduled');
     item.append(bubble);
-    const details = node('div', undefined, 'bubble-meta hint');
     const status = reminder.feedback === 'WAITING' ? 'Scheduled for ' + displayTime(reminder.scheduledAt)
       : reminder.feedback === 'LEGACY_SENT' ? 'Previously sent' : 'Sent (simulated)';
-    details.append(node('span', status));
+    item.append(node('p', status, 'bubble-meta hint'));
     if (reminder.canEdit) {
-      const edit = button('Edit', () => openAction('edit', reminder.id));
+      const more = node('button', '⋯', 'bubble-more quiet');
+      more.type = 'button';
+      more.setAttribute('aria-label', 'Actions for ' + reminder.message);
+      more.dataset.selection = '';
+      const actions = node('div', undefined, 'bubble-actions');
+      actions.setAttribute('popover', 'auto');
+      more.popoverTargetElement = actions;
+      const edit = button('Edit', () => {
+        actions.hidePopover();
+        more.focus();
+        openAction('edit', reminder.id);
+      });
+      edit.className = 'quiet';
+      edit.autofocus = true;
       edit.dataset.selection = '';
       edit.setAttribute('aria-label', 'Edit ' + reminder.message);
-      details.append(edit);
+      actions.append(edit);
+      item.append(more, actions);
     }
-    item.append(details);
     thread.append(item);
   }
   if (!visible.length && loaded.upcoming && loaded.history) thread.append(node('li', 'No messages yet.', 'hint thread-empty'));
