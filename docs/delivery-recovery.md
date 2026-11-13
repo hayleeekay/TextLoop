@@ -53,8 +53,9 @@ returns to the hold. Restart the normal application when recovery is complete. T
 same old command token cannot grant a new permission after the first was consumed.
 List again before each new recovery decision. Refused commands exit with code 2.
 Retry and replacement commands are refused when the delivery's number differs
-from the number in Settings. Review the existing outcome before scheduling
-another reminder. An uncertain submission still requires review.
+from the number in Settings. If the number changes after a replacement is
+approved, the scheduler holds the replacement and the reminder still shows
+delivery uncertainty.
 Startup or execution failures exit nonzero and emit a fixed diagnostic without exception
 text. These failures do not authorize retrying a submission or change an unknown outcome.
 

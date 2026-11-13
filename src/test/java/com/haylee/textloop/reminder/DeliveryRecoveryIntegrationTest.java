@@ -55,6 +55,7 @@ import com.haylee.textloop.LoggingStateExtension;
 import com.haylee.textloop.TextloopApplication;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
+import com.haylee.textloop.reminder.dto.ReminderViewResponse.Feedback;
 import com.haylee.textloop.scheduler.ReminderScheduler;
 import com.haylee.textloop.sms.SmsService;
 import com.haylee.textloop.sms.SmsSubmissionResult;
@@ -664,6 +665,22 @@ class DeliveryRecoveryIntegrationTest {
             assertThat(row.stoppedByNumberChange()).isTrue();
             assertThat(row.state()).isEqualTo(DeliveryState.RETRYABLE_REJECTION);
         });
+        verifyNoInteractions(sender);
+    }
+
+    @Test
+    void numberChangeAfterReplacementKeepsOriginalUncertaintyVisible() {
+        Delivery original = create("Unconfirmed before number change");
+        transactions().claim(original.getId(), now()).orElseThrow();
+        UUID replacement = transactions().recover(original.getId(), reload(original.getId()).getVersion(),
+                RecoveryAction.REPLACE_UNKNOWN, true);
+        transactions().setReminderNumber("+12035550101");
+        assertThat(transactions().claim(replacement, now())).isEmpty();
+        var view = context.getBean(ReminderReadService.class).detail(original.getReminder().getId());
+        assertThat(view.feedback()).isEqualTo(Feedback.DELIVERY_UNCERTAIN);
+        assertThat(view.canEdit()).isFalse();
+        assertThat(view.canRemindAgain()).isFalse();
+        assertThat(view.canWithdraw()).isTrue();
         verifyNoInteractions(sender);
     }
 
