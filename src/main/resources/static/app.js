@@ -737,14 +737,42 @@ $('theme').addEventListener('change', () => {
   setPreference('textloop.theme', $('theme').value);
 });
 const palette = $('palette');
+const paletteTrigger = $('palette-trigger');
+const paletteChoices = [...palette.querySelectorAll('button')];
+
+function applyPalette(choice) {
+  const color = choice.dataset.swatch;
+  document.documentElement.dataset.palette = color;
+  paletteTrigger.dataset.swatch = color;
+  $('palette-value').textContent = choice.textContent.trim();
+  for (const option of paletteChoices) option.setAttribute('aria-pressed', option === choice);
+}
+
 const savedPalette = preference('textloop.palette', 'purple');
-const paletteChoices = [...palette.querySelectorAll('input')];
-const selectedPalette = paletteChoices.find((choice) => choice.value === savedPalette) ?? paletteChoices[0];
-selectedPalette.checked = true;
-document.documentElement.dataset.palette = selectedPalette.value;
-palette.addEventListener('change', (event) => {
-  document.documentElement.dataset.palette = event.target.value;
-  setPreference('textloop.palette', event.target.value);
+applyPalette(paletteChoices.find((choice) => choice.dataset.swatch === savedPalette) ?? paletteChoices[0]);
+palette.addEventListener('click', (event) => {
+  const choice = event.target.closest('.palette-option');
+  if (!choice) return;
+  applyPalette(choice);
+  setPreference('textloop.palette', choice.dataset.swatch);
+  palette.hidePopover();
+  paletteTrigger.focus();
+});
+palette.addEventListener('toggle', (event) => {
+  if (event.newState === 'open') palette.querySelector('[aria-pressed="true"]').focus();
+});
+palette.addEventListener('keydown', (event) => {
+  const current = paletteChoices.indexOf(document.activeElement);
+  const last = paletteChoices.length - 1;
+  const next = {
+    ArrowDown: current === last ? 0 : current + 1,
+    ArrowUp: current <= 0 ? last : current - 1,
+    Home: 0,
+    End: last
+  }[event.key];
+  if (next === undefined) return;
+  event.preventDefault();
+  paletteChoices[next].focus();
 });
 window.addEventListener('resize', resizeMessage);
 document.addEventListener('visibilitychange', refreshInBackground);

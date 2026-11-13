@@ -77,53 +77,49 @@
       <option value="light">Light</option>
       <option value="dark">Dark</option>
     </select>
-    <fieldset id="palette" class="palette">
-      <legend>Color theme</legend>
-      <label class="palette-option" data-swatch="purple">
-        <input type="radio" name="palette" value="purple" class="sr-only" checked>
-        <span class="swatch" aria-hidden="true"></span><span>Purple</span>
-      </label>
-      <label class="palette-option" data-swatch="pink">
-        <input type="radio" name="palette" value="pink" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Pink</span>
-      </label>
-      <label class="palette-option" data-swatch="red">
-        <input type="radio" name="palette" value="red" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Red</span>
-      </label>
-      <label class="palette-option" data-swatch="orange">
-        <input type="radio" name="palette" value="orange" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Orange</span>
-      </label>
-      <label class="palette-option" data-swatch="yellow">
-        <input type="radio" name="palette" value="yellow" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Yellow</span>
-      </label>
-      <label class="palette-option" data-swatch="green">
-        <input type="radio" name="palette" value="green" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Green</span>
-      </label>
-      <label class="palette-option" data-swatch="cyan">
-        <input type="radio" name="palette" value="cyan" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Cyan</span>
-      </label>
-      <label class="palette-option" data-swatch="blue">
-        <input type="radio" name="palette" value="blue" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Blue</span>
-      </label>
-      <label class="palette-option" data-swatch="brown">
-        <input type="radio" name="palette" value="brown" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Brown</span>
-      </label>
-      <label class="palette-option" data-swatch="black">
-        <input type="radio" name="palette" value="black" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Black</span>
-      </label>
-      <label class="palette-option" data-swatch="colorful">
-        <input type="radio" name="palette" value="colorful" class="sr-only">
-        <span class="swatch" aria-hidden="true"></span><span>Colorful</span>
-      </label>
-    </fieldset>
+    <div class="palette">
+      <p id="palette-label">Color theme</p>
+      <button id="palette-trigger" type="button" class="palette-trigger" popovertarget="palette"
+              aria-labelledby="palette-label palette-value" data-swatch="purple">
+        <span class="swatch" aria-hidden="true"></span><span id="palette-value">Purple</span>
+        <span class="palette-chevron" aria-hidden="true"></span>
+      </button>
+      <div id="palette" popover role="group" aria-labelledby="palette-label">
+        <button type="button" class="palette-option" data-swatch="purple" aria-pressed="true">
+          <span class="swatch" aria-hidden="true"></span>Purple
+        </button>
+        <button type="button" class="palette-option" data-swatch="pink" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Pink
+        </button>
+        <button type="button" class="palette-option" data-swatch="red" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Red
+        </button>
+        <button type="button" class="palette-option" data-swatch="orange" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Orange
+        </button>
+        <button type="button" class="palette-option" data-swatch="yellow" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Yellow
+        </button>
+        <button type="button" class="palette-option" data-swatch="green" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Green
+        </button>
+        <button type="button" class="palette-option" data-swatch="cyan" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Cyan
+        </button>
+        <button type="button" class="palette-option" data-swatch="blue" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Blue
+        </button>
+        <button type="button" class="palette-option" data-swatch="brown" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Brown
+        </button>
+        <button type="button" class="palette-option" data-swatch="black" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Black
+        </button>
+        <button type="button" class="palette-option" data-swatch="colorful" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span>Colorful
+        </button>
+      </div>
+    </div>
     <form id="recipient-form">
       <h2>Your number</h2>
       <label for="phone">Default number for reminders</label>
