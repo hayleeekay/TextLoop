@@ -302,11 +302,16 @@ function composerOffset() {
   return dock.top + inset - fieldset.top;
 }
 
+const dockedSurface = {
+  backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: '0px'
+};
+
 function animateComposer() {
   if (!allowMotion.matches) return;
   const offset = composerOffset();
+  const start = offset === null ? { opacity: 0 } : { opacity: 1, ...dockedSurface };
   editSurface.animate(
-    [{ opacity: offset === null ? 0 : 1, transform: `translateY(${offset ?? 10}px)` }, { opacity: 1, transform: 'none' }],
+    [{ ...start, transform: `translateY(${offset ?? 10}px)` }, { opacity: 1, transform: 'none' }],
     { duration: offset === null ? 320 : 460, easing: 'cubic-bezier(.4,0,.2,1)' });
 }
 
@@ -329,8 +334,9 @@ async function finishDialog() {
   if (allowMotion.matches) {
     const fields = $('fields');
     const startY = fields.getBoundingClientRect().top;
-    const { opacity, transform } = getComputedStyle(editSurface);
-    const current = { opacity, transform };
+    const { opacity, transform, backgroundColor, borderColor, borderRadius } = getComputedStyle(editSurface);
+    const frame = { backgroundColor, borderColor, borderRadius };
+    const current = { ...frame, opacity, transform };
     editSurface.getAnimations().forEach((animation) => animation.cancel());
     if (composerOffset() !== null) {
       const values = [$('send-date'), $('send-time'), $('message')];
@@ -344,7 +350,8 @@ async function finishDialog() {
       const start = startY - fields.getBoundingClientRect().top;
       const end = composerOffset() ?? start;
       transition = editSurface.animate([
-        { transform: `translateY(${start}px)` }, { transform: `translateY(${end}px)` }
+        { ...frame, transform: `translateY(${start}px)` },
+        { ...dockedSurface, transform: `translateY(${end}px)` }
       ], { duration: 380, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
       fade.forEach((animation) => animation.cancel());
       values.forEach((input) => input.animate([{ color: 'transparent' }, { color: getComputedStyle(input).color }],
