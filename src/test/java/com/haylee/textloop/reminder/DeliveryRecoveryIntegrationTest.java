@@ -650,6 +650,24 @@ class DeliveryRecoveryIntegrationTest {
     }
 
     @Test
+    void numberChangeRefusesRecoveryThatWouldSendTheOldPayload() {
+        Delivery original = create("Review before sending again");
+        var first = transactions().claim(original.getId(), now()).orElseThrow();
+        transactions().setReminderNumber("+12035550101");
+        assertThatThrownBy(() -> transactions().recover(original.getId(), reload(original.getId()).getVersion(),
+                RecoveryAction.REPLACE_UNKNOWN, true)).isInstanceOf(RecoveryConflictException.class);
+        assertThat(reload(original.getId()).getState()).isEqualTo(DeliveryState.UNKNOWN);
+        transactions().recordResult(original.getId(), first.attemptCount(), SmsSubmissionResult.retryableRejection());
+        clock.advance(Duration.ofMinutes(1));
+        assertThat(transactions().claim(original.getId(), now())).isEmpty();
+        assertThat(transactions().inspect()).singleElement().satisfies(row -> {
+            assertThat(row.stoppedByNumberChange()).isTrue();
+            assertThat(row.state()).isEqualTo(DeliveryState.RETRYABLE_REJECTION);
+        });
+        verifyNoInteractions(sender);
+    }
+
+    @Test
     void unknownReplacementRequiresAcknowledgementAndPreservesOriginalUncertainty() {
         Delivery original = create("Preserve my original snapshot");
         transactions().claim(original.getId(), now());

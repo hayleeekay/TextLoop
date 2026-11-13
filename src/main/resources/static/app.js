@@ -75,7 +75,7 @@ function deliveryText(reminder) {
       : 'Waiting to retry, no earlier than ' + localTime(reminder.nextAttemptAt) + '.';
     case 'RETRY_EXHAUSTED': return reminder.withdrawnAt ? 'Sending attempts stopped. You can choose Reuse.'
       : 'Sending attempts stopped. Delivery review is needed before another attempt.';
-    case 'REMINDER_NUMBER_CHANGED': return 'Retries stopped when your reminder number changed.';
+    case 'REMINDER_NUMBER_CHANGED': return 'Sending stopped because the reminder number changed.';
     case 'PERMANENT_REJECTION': return 'The sender rejected this alert. You can choose Reuse.';
     case 'DELIVERY_UNCERTAIN': return 'Sending could not be confirmed. Delivery review is needed before scheduling again.';
     case 'LEGACY_SENT': return 'Previously marked sent. Acceptance evidence is unavailable.';
@@ -710,10 +710,14 @@ async function loadReminderNumber() {
   input.value = '';
   input.disabled = saveNumber.disabled = true;
   try {
-    const { phoneNumber } = await requestJson(numberPath);
+    const { phoneNumber, configured } = await requestJson(numberPath);
     if (read !== numberRead) return;
     if (typeof phoneNumber !== 'string') throw {};
-    input.value = input.defaultValue = phoneNumber;
+    const previous = configured === false ? preference('textloop.recipient', '') : '';
+    input.value = previous || phoneNumber;
+    if (previous && previous !== phoneNumber && !$('settings').hidden) {
+      notice('Confirm the number you previously saved in this browser to use it for your reminders.');
+    }
     input.disabled = saveNumber.disabled = false;
   } catch {
     if (read === numberRead && !$('settings').hidden) {
@@ -738,7 +742,7 @@ $('recipient-form').addEventListener('submit', async (event) => {
   controls();
   try {
     const saved = await requestJson(numberPath, 'PUT', { phoneNumber });
-    input.value = input.defaultValue = saved.phoneNumber;
+    input.value = saved.phoneNumber;
     notice('Reminder number updated.');
     await refreshLists();
   } catch {

@@ -80,6 +80,9 @@ to this computer; it currently has no authentication.
    number `+12035550100`. Confirm a new number in **Settings** to use it for
    reminders that haven't started sending, including ones already scheduled.
    Retries to a different number stop. A send already in progress can finish.
+   If you saved a number in an older browser preview, Settings offers it for
+   confirmation. Until you confirm it, existing scheduled reminders keep their
+   stored number and new reminders use the demo number.
 2. The composer starts with tomorrow at 9 AM. To try a reminder sooner, edit the
    date and time above your message, then tap the send arrow.
 3. Open **Schedule** to withdraw a reminder or edit it in the Messages composer

@@ -20,7 +20,7 @@ Later lists do not change existing delivery outcomes.
 
 The list omits phone numbers, message text, and provider references. It includes the
 current-intent flag, outcome/reason, attempt count, next retry time, exhaustion,
-recovery metadata, withdrawal time, and the delivery version token required for
+whether a number change stopped sending, recovery metadata, withdrawal time, and the delivery version token required for
 writes. This token is separate from the reminder version used by the HTTP API. Older
 unknown records remain listed after replacement. An `ACCEPTED` current delivery with a `PENDING`
 reminder needs finalization.
@@ -52,6 +52,9 @@ Recovery commits the permission; normal processing consumes it once. Another rej
 returns to the hold. Restart the normal application when recovery is complete. The
 same old command token cannot grant a new permission after the first was consumed.
 List again before each new recovery decision. Refused commands exit with code 2.
+Retry and replacement commands are refused when the delivery's number differs
+from the number in Settings. Review the existing outcome before scheduling
+another reminder. An uncertain submission still requires review.
 Startup or execution failures exit nonzero and emit a fixed diagnostic without exception
 text. These failures do not authorize retrying a submission or change an unknown outcome.
 

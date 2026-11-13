@@ -40,6 +40,14 @@ public class DeliveryTransactions {
         return configuredNumber().orElse(DEMO_NUMBER);
     }
 
+    public record NumberSetting(String phoneNumber, boolean configured) {}
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public NumberSetting numberSetting() {
+        var number = configuredNumber();
+        return new NumberSetting(number.orElse(DEMO_NUMBER), number.isPresent());
+    }
+
     public void setReminderNumber(String phoneNumber) {
         numbers.setNumber(phoneNumber);
     }
@@ -210,6 +218,10 @@ public class DeliveryTransactions {
             throw new RecoveryConflictException();
         }
         DeliveryPolicy.requireRecoveryAction(delivery, action, acknowledgeDuplicateRisk);
+        if ((action == RecoveryAction.RETRY_ONCE || action == RecoveryAction.REPLACE_UNKNOWN)
+                && configuredNumber().filter(number -> !number.equals(delivery.getPhoneNumber())).isPresent()) {
+            throw new RecoveryConflictException();
+        }
         LocalDateTime now = now();
         UUID resultingId = id;
         switch (action) {
@@ -249,7 +261,8 @@ public class DeliveryTransactions {
                     delivery.getState(), delivery.getReason(), delivery.getAttemptCount(), delivery.getNextAttemptAt(),
                     delivery.isExtraAttemptPermitted(), DeliveryPolicy.exhausted(delivery),
                     delivery.getId().equals(reminder.getCurrentDeliveryId()), reminder.getStatus(), reminder.getWithdrawnAt(),
-                    delivery.getRecoveryAction(), delivery.getRecoveredAt(), delivery.getReplacesDeliveryId());
+                    delivery.getRecoveryAction(), delivery.getRecoveredAt(), delivery.getReplacesDeliveryId(),
+                    delivery.isStoppedByNumberChange());
         }).toList();
     }
 
@@ -312,5 +325,5 @@ public class DeliveryTransactions {
             DeliveryReason reason, int attemptCount, LocalDateTime nextAttemptAt, boolean extraAttemptPermitted,
             boolean retryExhausted, boolean current, ReminderStatus reminderStatus, LocalDateTime withdrawnAt,
             RecoveryAction recoveryAction,
-            LocalDateTime recoveredAt, UUID replacesDeliveryId) {}
+            LocalDateTime recoveredAt, UUID replacesDeliveryId, boolean stoppedByNumberChange) {}
 }

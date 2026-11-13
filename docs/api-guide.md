@@ -392,6 +392,7 @@ arrays, including `[]` when empty. Feedback describes the current alert:
 | `RETRY_WAITING` | A retryable rejection was recorded. Unless withdrawn, another attempt is permitted; `nextAttemptAt` is its earliest eligible time, not a promised send time. |
 | `RETRY_EXHAUSTED` | The retry budget is used. Review delivery recovery before another attempt. |
 | `PERMANENT_REJECTION` | The sender rejected the submission. Remind me again can schedule a fresh alert. |
+| `REMINDER_NUMBER_CHANGED` | Sending stopped because an existing delivery was tied to a different number. Confirmed rejections can be reused with the current number. |
 | `DELIVERY_UNCERTAIN` | Submission outcome is unresolved. Use delivery review before scheduling again. |
 | `LEGACY_SENT` | A legacy record is marked `SENT` without a delivery record. Acceptance evidence is unavailable. |
 | `UNTRACKED` / `INCONSISTENT_DELIVERY` | Delivery information is missing or inconsistent. Ordinary actions are unavailable. |
