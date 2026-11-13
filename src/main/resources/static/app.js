@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 const form = $('reminder-form');
 const feedback = $('form-feedback');
 const editDialog = $('edit-dialog');
+const editSurface = $('edit-surface');
 const retryKey = 'textloop.pendingReuse';
 const themes = ['system', 'light', 'dark'];
 let mode = 'view';
@@ -213,7 +214,7 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('save').setAttribute('aria-label', nextMode === 'edit' ? 'Save changes' : 'Schedule text');
   if (nextMode !== 'edit') navigation('messages-tab');
   if (nextMode === 'edit' && !editDialog.open) {
-    editDialog.append(form, $('notice'), feedback, $('detail'));
+    editSurface.append(form, $('notice'), feedback, $('detail'));
     $('message').setAttribute('autofocus', '');
     editDialog.showModal();
   }
@@ -288,13 +289,11 @@ function animateBubble(text, from, to, duration) {
     left: from.left + 'px', top: from.top + 'px', width: from.width + 'px', height: from.height + 'px'
   });
   editDialog.append(bubble);
-  // Keep line breaks stable while the copy travels. The real field takes over at the end.
   const animation = bubble.animate([
     { transform: 'none', opacity: 1 },
-    { opacity: .82, offset: .68 },
     {
       transform: `translate(${to.left - from.left}px, ${to.top - from.top}px)`,
-      opacity: 0
+      width: to.width + 'px', height: to.height + 'px', opacity: 0
     }
   ], { duration, easing: 'cubic-bezier(.4,0,.2,1)' });
   animation.finished.then(() => bubble.remove(), () => bubble.remove());
@@ -304,9 +303,13 @@ function animateEditOpen(reminder, origin) {
   if (!editMotion.matches) return;
   const duration = 310;
   const message = $('message');
-  animateBubble(reminder.message, origin, visibleBounds(message), duration);
-  editDialog.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 210, easing: 'ease-out' });
-  if (origin) message.animate([{ opacity: .15 }, { opacity: 1 }], { duration, easing: 'ease-in' });
+  const destination = visibleBounds(message);
+  if (origin && destination) {
+    animateBubble(reminder.message, origin, destination, duration);
+    editSurface.animate([{ opacity: 0 }, { opacity: 0, offset: .55 }, { opacity: 1 }], { duration });
+  } else {
+    editSurface.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 210, easing: 'ease-out' });
+  }
 }
 
 function focusEditedMessage(id) {
@@ -326,10 +329,9 @@ async function finishEdit(text) {
     const duration = 240;
     const message = $('message');
     editDialog.querySelector('.bubble-flight')?.remove();
-    editDialog.getAnimations().forEach((animation) => animation.cancel());
-    message.getAnimations().forEach((animation) => animation.cancel());
+    editSurface.getAnimations().forEach((animation) => animation.cancel());
     animateBubble(text, visibleBounds(message), visibleBounds(threadRow(selected.id)?.querySelector('.bubble')), duration);
-    const fade = editDialog.animate([{ opacity: 1 }, { opacity: 0 }],
+    const fade = editSurface.animate([{ opacity: 1 }, { opacity: 0 }],
       { duration, easing: 'ease-in-out', fill: 'forwards' });
     await fade.finished.catch(() => {});
     finishComposer();
@@ -831,6 +833,19 @@ form.addEventListener('input', (event) => {
   ++detailRead;
   if (event.target === $('message')) resizeMessage();
 });
+for (const picker of form.querySelectorAll('[data-picker]')) {
+  const input = $(picker.dataset.picker);
+  if (typeof input.showPicker !== 'function') continue;
+  picker.hidden = false;
+  picker.addEventListener('click', () => {
+    input.focus();
+    try {
+      input.showPicker();
+    } catch {
+      // Keep direct entry available if the browser cannot open a picker here.
+    }
+  });
+}
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (saving || editDialog.classList.contains('closing') || needsReview || uncertainCreate || !form.reportValidity()) return;
