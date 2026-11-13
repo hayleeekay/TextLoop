@@ -25,7 +25,7 @@
   <section id="saved-retry" hidden aria-label="Unconfirmed save"></section>
   <section id="editor" class="composer" hidden aria-labelledby="conversation-title">
     <div id="conversation">
-      <div class="contact">
+      <div class="view-heading contact">
         <span class="avatar" aria-hidden="true">M</span>
         <h1 id="conversation-title" tabindex="-1">Future me ✨</h1>
       </div>
@@ -51,73 +51,74 @@
   <section id="detail" hidden tabindex="-1" aria-label="Current saved version"></section>
   <dialog id="edit-dialog" aria-label="Edit reminder"></dialog>
   <section id="browse" hidden aria-labelledby="view-title">
-    <div class="heading browse-heading">
+    <div class="view-heading">
       <h1 id="view-title" tabindex="-1">Reminders</h1>
       <button id="new-reminder" type="button" class="primary">+ New reminder</button>
-      <p id="view-help" class="hint">Scheduled texts and sends that need attention.</p>
     </div>
     <div id="upcoming" aria-live="polite"></div>
     <div id="history" hidden aria-live="polite"></div>
   </section>
-  <section id="settings" class="panel settings" hidden aria-labelledby="settings-title">
-    <h1 id="settings-title" class="sr-only">Settings</h1>
-    <h2>Appearance</h2>
-    <label for="theme">Mode</label>
-    <select id="theme">
-      <option value="system">System</option>
-      <option value="light">Light</option>
-      <option value="dark">Dark</option>
-    </select>
-    <div class="palette">
-      <p id="palette-label">Color theme</p>
-      <button id="palette-trigger" type="button" class="palette-trigger" popovertarget="palette"
-              aria-labelledby="palette-label palette-value" data-swatch="purple">
-        <span class="swatch" aria-hidden="true"></span><span id="palette-value">Purple</span>
-        <span class="palette-chevron" aria-hidden="true"></span>
-      </button>
-      <div id="palette" popover role="group" aria-labelledby="palette-label">
-        <button type="button" class="palette-option" data-swatch="purple" aria-pressed="true">
-          <span class="swatch" aria-hidden="true"></span>Purple
+  <section id="settings" hidden aria-labelledby="settings-title">
+    <div class="view-heading"><h1 id="settings-title">Settings</h1></div>
+    <div class="panel settings">
+      <h2>Appearance</h2>
+      <label for="theme">Mode</label>
+      <select id="theme">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+      <div class="palette">
+        <p id="palette-label">Color theme</p>
+        <button id="palette-trigger" type="button" class="palette-trigger" popovertarget="palette"
+                aria-labelledby="palette-label palette-value" data-swatch="purple">
+          <span class="swatch" aria-hidden="true"></span><span id="palette-value">Purple</span>
+          <span class="palette-chevron" aria-hidden="true"></span>
         </button>
-        <button type="button" class="palette-option" data-swatch="pink" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Pink
-        </button>
-        <button type="button" class="palette-option" data-swatch="red" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Red
-        </button>
-        <button type="button" class="palette-option" data-swatch="orange" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Orange
-        </button>
-        <button type="button" class="palette-option" data-swatch="yellow" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Yellow
-        </button>
-        <button type="button" class="palette-option" data-swatch="green" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Green
-        </button>
-        <button type="button" class="palette-option" data-swatch="cyan" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Cyan
-        </button>
-        <button type="button" class="palette-option" data-swatch="blue" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Blue
-        </button>
-        <button type="button" class="palette-option" data-swatch="brown" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Brown
-        </button>
-        <button type="button" class="palette-option" data-swatch="black" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Black
-        </button>
-        <button type="button" class="palette-option" data-swatch="colorful" aria-pressed="false">
-          <span class="swatch" aria-hidden="true"></span>Colorful
-        </button>
+        <div id="palette" popover role="group" aria-labelledby="palette-label">
+          <button type="button" class="palette-option" data-swatch="purple" aria-pressed="true">
+            <span class="swatch" aria-hidden="true"></span>Purple
+          </button>
+          <button type="button" class="palette-option" data-swatch="pink" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Pink
+          </button>
+          <button type="button" class="palette-option" data-swatch="red" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Red
+          </button>
+          <button type="button" class="palette-option" data-swatch="orange" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Orange
+          </button>
+          <button type="button" class="palette-option" data-swatch="yellow" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Yellow
+          </button>
+          <button type="button" class="palette-option" data-swatch="green" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Green
+          </button>
+          <button type="button" class="palette-option" data-swatch="cyan" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Cyan
+          </button>
+          <button type="button" class="palette-option" data-swatch="blue" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Blue
+          </button>
+          <button type="button" class="palette-option" data-swatch="brown" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Brown
+          </button>
+          <button type="button" class="palette-option" data-swatch="black" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Black
+          </button>
+          <button type="button" class="palette-option" data-swatch="colorful" aria-pressed="false">
+            <span class="swatch" aria-hidden="true"></span>Colorful
+          </button>
+        </div>
       </div>
+      <form id="recipient-form">
+        <h2>Your number</h2>
+        <label for="phone">Number for reminders</label>
+        <input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="+12035550100" maxlength="32" required>
+        <p class="hint">Use your own number with its country code. Sending is simulated.</p>
+        <button id="save-number" type="submit" class="primary" disabled>Save number</button>
+      </form>
     </div>
-    <form id="recipient-form">
-      <h2>Your number</h2>
-      <label for="phone">Number for reminders</label>
-      <input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="+12035550100" maxlength="32" required>
-      <p class="hint">Use your own number with its country code. Sending is simulated.</p>
-      <button id="save-number" type="submit" class="primary" disabled>Save number</button>
-    </form>
   </section>
   <noscript><p>Enable JavaScript to use TextLoop.</p></noscript>
 </main>

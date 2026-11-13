@@ -103,17 +103,12 @@ button.quiet { background: transparent; border-color: transparent; color: var(--
 button.quiet:hover { background: var(--hover); }
 button:disabled { opacity: .6; cursor: default; }
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-.heading { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1rem; }
-.heading .hint { margin-top: .35rem; }
-.browse-heading {
-  flex-wrap: wrap; gap: .35rem .75rem;
-  padding: .85rem 1rem;
-}
-.browse-heading, .settings > h2 {
+.view-heading {
+  display: flex; justify-content: space-between; align-items: center; gap: .625rem;
+  padding: .625rem 1rem; min-height: 4.25rem; margin-bottom: 1rem;
   background: var(--accent); border: 1px solid var(--line); border-radius: .85rem;
 }
-.browse-heading .hint { flex-basis: 100%; margin: 0; }
-.browse-heading .hint:empty { display: none; }
+.view-heading h1 { font-size: 1.6rem; }
 #new-reminder { white-space: nowrap; }
 .hint { color: var(--soft); font-size: .875rem; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
@@ -123,7 +118,12 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .schedule-group + .schedule-group { margin-top: 1rem; }
 .schedule-group > h2 { margin-bottom: .4rem; color: var(--soft); }
 .schedule-group.next-up > h2 { color: var(--primary); }
-#upcoming .reminder-card { background: var(--card); }
+#upcoming .reminder-card {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: .65rem;
+  background: var(--card);
+}
+#upcoming .reminder-card > :not(.reminder-menu) { grid-column: 1; }
+.reminder-menu { grid-area: 1 / 2 / span 2; align-self: center; }
 #history .reminder-card {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .35rem .65rem;
   background: var(--tint);
@@ -162,7 +162,6 @@ input, textarea, select {
 textarea { resize: vertical; }
 .form-actions { margin-top: .75rem; }
 .settings { width: min(100%, 33rem); margin-inline: auto; }
-.settings > h2 { padding: .65rem .75rem; }
 .settings form { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: 1rem; }
 .settings .hint { margin: .4rem 0 .65rem; }
 .palette { margin-top: 1rem; }
@@ -202,16 +201,14 @@ textarea { resize: vertical; }
 }
 .composer {
   flex: 1 0 auto; display: flex; flex-direction: column;
-  border: 1px solid var(--line); border-radius: 1.35rem; background: var(--thread-background);
+  border: 1px solid var(--line); border-radius: .85rem; background: var(--thread-background);
 }
 .contact {
-  display: grid; justify-items: center; gap: .25rem; text-align: center; padding: .8rem;
-  border-bottom: 1px solid var(--line); border-radius: 1.35rem 1.35rem 0 0;
-  background: var(--accent);
+  justify-content: center; margin: 0; text-align: center;
+  border-width: 0 0 1px; border-radius: .85rem .85rem 0 0;
 }
-.contact h1 { font-size: 1.6rem; }
 .avatar {
-  display: grid; place-items: center; width: 2.85rem; aspect-ratio: 1; border-radius: 50%;
+  display: grid; place-items: center; width: 2.35rem; aspect-ratio: 1; border-radius: 50%;
   background: var(--primary); color: var(--on-primary); font: 600 1.2rem/1 system-ui, sans-serif;
 }
 #conversation { flex: 1; display: flex; flex-direction: column; }
@@ -228,7 +225,7 @@ textarea { resize: vertical; }
 .bubble-meta { margin-top: .2rem; text-align: right; }
 .is-editing { visibility: hidden; }
 .bubble-more {
-  flex: 0 0 2.75rem; padding: 0; border-radius: 50%; font-size: 1.25rem;
+  flex: 0 0 2.75rem; width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.25rem;
 }
 .bubble-more:focus-visible { outline-offset: -2px; }
 .bubble-actions {
@@ -242,7 +239,7 @@ textarea { resize: vertical; }
 }
 .composer .panel {
   position: sticky; bottom: 0; z-index: 1; border: 0; border-top: 1px solid var(--line);
-  padding: .5rem 1rem .75rem; border-radius: 0 0 1.35rem 1.35rem; background: var(--surface);
+  padding: .5rem 1rem .75rem; border-radius: 0 0 .85rem .85rem; background: var(--surface);
 }
 #reminder-form fieldset {
   max-width: 40rem; margin-inline: auto;
@@ -286,6 +283,13 @@ textarea { resize: vertical; }
   box-shadow: 0 1rem 3rem rgb(0 0 0 / .22);
 }
 #edit-dialog::backdrop { background: rgb(23 19 28 / .48); backdrop-filter: blur(4px); }
+@media (prefers-reduced-motion: no-preference) {
+  #edit-dialog::backdrop { transition: opacity 310ms ease; }
+  #edit-dialog.closing::backdrop { opacity: 0; transition-duration: 240ms; }
+  @starting-style {
+    #edit-dialog[open]::backdrop { opacity: 0; }
+  }
+}
 #edit-dialog .panel { padding: 0; border: 0; }
 #edit-dialog .time-inputs { border: 1px dashed var(--control); }
 #edit-dialog #notice { margin-block: .75rem 0; }
