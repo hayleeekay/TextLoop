@@ -469,6 +469,8 @@ function renderSchedule(reminders) {
 
 function renderThread() {
   const thread = $('thread');
+  const focusedRow = thread.contains(document.activeElement)
+    ? document.activeElement.closest('.bubble-row') : null;
   const sent = (loaded.history ?? []).filter((item) => ['ACCEPTED', 'LEGACY_SENT'].includes(item.feedback) && !item.withdrawnAt);
   const scheduled = (loaded.upcoming ?? []).filter((item) => item.feedback === 'WAITING');
   const visible = [...sent.slice(0, 3).reverse(), ...scheduled.slice(0, 3)];
@@ -516,6 +518,7 @@ function renderThread() {
   }
   if (!visible.length && loaded.upcoming && loaded.history) thread.append(node('li', 'No messages yet.', 'hint thread-empty'));
   updateThreadEditing();
+  if (focusedRow) focusEditedMessage(focusedRow.dataset.reminderId);
 }
 
 async function refreshList(name, background = false) {
