@@ -1,19 +1,19 @@
 :root {
   color-scheme: light dark;
   font: 100%/1.5 system-ui, sans-serif;
-  --hue: 285;
+  --hue: 312;
   --chroma: .022;
-  --paper: light-dark(oklch(.96 var(--chroma) var(--hue)), oklch(.22 var(--chroma) var(--hue)));
-  --surface: light-dark(oklch(.985 calc(var(--chroma) * .5) var(--hue)), oklch(.27 var(--chroma) var(--hue)));
+  --paper: light-dark(oklch(.967 calc(var(--chroma) * .48) var(--hue)), oklch(.22 calc(var(--chroma) * .65) var(--hue)));
+  --surface: light-dark(oklch(.989 calc(var(--chroma) * .25) var(--hue)), oklch(.27 calc(var(--chroma) * .75) var(--hue)));
   --ink: light-dark(oklch(.25 var(--chroma) var(--hue)), oklch(.96 var(--chroma) var(--hue)));
   --soft: light-dark(oklch(.45 var(--chroma) var(--hue)), oklch(.79 var(--chroma) var(--hue)));
   --line: light-dark(oklch(.86 var(--chroma) var(--hue)), oklch(.42 var(--chroma) var(--hue)));
   --control: light-dark(oklch(.59 var(--chroma) var(--hue)), oklch(.67 var(--chroma) var(--hue)));
   --primary: light-dark(oklch(.40 calc(var(--chroma) * 2.5) var(--hue)), oklch(.80 calc(var(--chroma) * 1.7) var(--hue)));
   --on-primary: light-dark(oklch(.99 0 0), oklch(.23 var(--chroma) var(--hue)));
-  --tint: light-dark(oklch(.91 calc(var(--chroma) * 1.5) var(--hue)), oklch(.36 calc(var(--chroma) * 1.3) var(--hue)));
+  --tint: light-dark(oklch(.931 calc(var(--chroma) * 1.85) var(--hue)), oklch(.34 calc(var(--chroma) * 1.5) var(--hue)));
   --card: color-mix(in srgb, var(--surface) 68%, var(--tint));
-  --accent: var(--card);
+  --accent: light-dark(oklch(.879 calc(var(--chroma) * 2.8) var(--hue)), oklch(.395 calc(var(--chroma) * 2.5) var(--hue)));
   --sent-bubble: var(--tint);
   --scheduled-bubble: var(--card);
   --thread-background: var(--surface);
@@ -24,12 +24,7 @@
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
-:root[data-palette="purple"] {
-  --paper: light-dark(#f8f4ec, #211e26);
-  --surface: light-dark(#fffcf8, #2b2731);
-  --primary: light-dark(#563658, #d9bfd8);
-  --tint: light-dark(#eee2f2, #44334d);
-}
+:is([data-palette="purple"], [data-swatch="purple"]) { --hue: 312; }
 :is([data-palette="pink"], [data-swatch="pink"]) { --hue: 345; }
 :is([data-palette="red"], [data-swatch="red"]) { --hue: 23; }
 :is([data-palette="orange"], [data-swatch="orange"]) { --hue: 56; }
@@ -40,7 +35,7 @@
 :is([data-palette="brown"], [data-swatch="brown"]) { --hue: 65; --chroma: .015; }
 :is([data-palette="black"], [data-swatch="black"]) { --chroma: 0; }
 /* Each sample keeps its own hue when the rest of the app changes color. */
-:where(.palette-option, .palette-trigger) { --hue: 300; --chroma: .022; }
+:where(.palette-option, .palette-trigger) { --chroma: .022; }
 :is([data-palette="colorful"], [data-swatch="colorful"]) {
   --rose: light-dark(#f1d5dc, #513643);
   --mint: light-dark(#d5e7d9, #2d473e);
