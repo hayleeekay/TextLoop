@@ -126,6 +126,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .schedule-group + .schedule-group { margin-top: 1rem; }
 .schedule-group > h2 { margin-bottom: .4rem; color: var(--soft); }
 .schedule-group:first-child .reminder-card[data-feedback="WAITING"] { background: var(--next); }
+.schedule-group:first-child .reminder-card[data-feedback="WAITING"] .meta { color: var(--ink); }
 .reminder-card[data-feedback="WAITING"] { background: color-mix(in srgb, var(--tint) 58%, var(--surface)); }
 #history .reminder-card {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .35rem .65rem;

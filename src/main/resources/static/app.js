@@ -372,6 +372,9 @@ function renderCard(reminder, name) {
   const time = displayTime(reminder.withdrawnAt ?? reminder.scheduledAt);
   const dateLabel = status && !reminder.withdrawnAt ? 'Scheduled for ' + time : time;
   meta.append(node('span', status ? status + ' · ' + dateLabel : dateLabel));
+  if (reminder.withdrawnAt && reminder.feedback === 'ACCEPTED') {
+    meta.append(node('span', 'Simulated send accepted'));
+  }
   if (reminder.phoneNumber !== recipient) meta.append(node('span', 'To ' + reminder.phoneNumber));
   row.append(meta);
   if (attention) row.append(node('p', deliveryText(reminder), 'attention-text'));
