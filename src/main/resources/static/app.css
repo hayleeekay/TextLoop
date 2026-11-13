@@ -102,8 +102,8 @@ button.primary:hover { background: color-mix(in srgb, var(--primary) 90%, var(--
 button.quiet { background: transparent; border-color: transparent; color: var(--soft); }
 button.quiet:hover { background: var(--hover); }
 button:disabled { opacity: .6; cursor: default; }
-:focus-visible { outline: none; }
-:is(button, input, select, textarea):focus-visible {
+:focus-visible {
+  outline: none;
   box-shadow: inset 0 -2px currentColor;
 }
 @media (forced-colors: active) {
