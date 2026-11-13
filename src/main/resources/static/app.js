@@ -219,9 +219,9 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
     firstField.setAttribute('autofocus', '');
     editDialog.showModal();
     firstField.removeAttribute('autofocus');
-    animateComposer();
   }
   resizeMessage();
+  if (editDialog.open) animateComposer();
   if (needsReview) reviewRequired('Review the saved reminder before saving again.');
   controls();
   if (focus) {
@@ -262,7 +262,7 @@ function threadRow(id) {
 function closeEditDialog() {
   if (!editDialog.open) return;
   editDialog.close();
-  editDialog.classList.remove('closing');
+  editDialog.classList.remove('closing', 'from-composer');
   $('editor').append(form);
   $('composer-space').hidden = true;
   $('toast').before($('notice'));
@@ -277,11 +277,22 @@ function visibleBounds(element) {
   return null;
 }
 
+function composerOffset() {
+  const space = $('composer-space');
+  const dock = visibleBounds(space);
+  if (!dock) return null;
+  const fieldset = $('fields').getBoundingClientRect();
+  // Align the scheduling bar with its docked position before moving the form.
+  const inset = parseFloat(space.style.paddingTop);
+  return dock.top + inset - fieldset.top;
+}
+
 function animateComposer() {
   if (!editMotion.matches) return;
+  const offset = composerOffset();
   editSurface.animate(
-    [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
-    { duration: 250, easing: 'cubic-bezier(.2,.75,.3,1)' });
+    [{ opacity: offset === null ? 0 : 1, transform: `translateY(${offset ?? 10}px)` }, { opacity: 1, transform: 'none' }],
+    { duration: offset === null ? 320 : 460, easing: 'cubic-bezier(.4,0,.2,1)' });
 }
 
 function focusEditedMessage(id) {
@@ -299,17 +310,19 @@ async function finishDialog() {
   const editedId = mode === 'edit' ? selected.id : null;
   editDialog.classList.add('closing');
   controls();
-  let fade;
+  let transition;
   if (editMotion.matches) {
     const { opacity, transform } = getComputedStyle(editSurface);
     const current = { opacity, transform };
     editSurface.getAnimations().forEach((animation) => animation.cancel());
-    fade = editSurface.animate([current, { opacity: 0, transform: 'translateY(6px)' }],
-      { duration: 180, easing: 'ease-in', fill: 'forwards' });
-    await fade.finished.catch(() => {});
+    const offset = composerOffset();
+    transition = editSurface.animate([current, {
+      opacity: offset === null ? 0 : 1, transform: `translateY(${offset ?? 6}px)`
+    }], { duration: offset === null ? 260 : 380, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    await transition.finished.catch(() => {});
   }
   finishComposer();
-  fade?.cancel();
+  transition?.cancel();
   if (editedId !== null && !$('editor').hidden) focusEditedMessage(editedId);
 }
 
@@ -423,7 +436,9 @@ async function openAction(nextMode, id) {
       if (!$('editor').hidden) {
         const space = $('composer-space');
         space.style.height = form.getBoundingClientRect().height + 'px';
+        space.style.paddingTop = $('fields').getBoundingClientRect().top - form.getBoundingClientRect().top + 'px';
         space.hidden = false;
+        editDialog.classList.add('from-composer');
       }
       showForm(nextMode, reminder, { reviewed: true });
     }
@@ -813,11 +828,9 @@ form.addEventListener('input', (event) => {
 });
 for (const input of [$('send-date'), $('send-time')]) {
   if (typeof input.showPicker !== 'function') continue;
-  input.closest('.schedule-field').addEventListener('click', (event) => {
-    if (input.matches(':disabled')) return;
+  input.addEventListener('click', () => {
     try {
       input.showPicker();
-      event.preventDefault();
     } catch {
       input.focus();
     }

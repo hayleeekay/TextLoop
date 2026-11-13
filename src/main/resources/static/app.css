@@ -246,24 +246,22 @@ textarea { resize: vertical; }
 #reminder-form fieldset {
   max-width: 40rem; margin-inline: auto;
 }
-.time-inputs { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: .5rem; }
-.time-inputs label { min-width: 0; margin: 0; font-size: .8125rem; }
-.time-inputs input { margin-top: .15rem; padding-inline: .35rem; font-size: 1rem; font-weight: 500; }
-.schedule-field {
-  display: flex; min-width: 0; align-items: center; gap: .35rem;
-  padding: 0 .65rem; border: 1px solid var(--line); border-radius: .75rem;
+.time-inputs {
+  display: flex; gap: .85rem; padding-inline: .65rem; border-radius: .75rem;
   background: var(--selection);
 }
-.schedule-field label {
-  color: var(--soft);
+.schedule-field { display: flex; min-width: 0; align-items: center; gap: .35rem; }
+.schedule-field label { margin: 0; font-size: .8125rem; color: var(--soft); cursor: pointer; }
+.schedule-field input {
+  width: auto; max-width: 100%; border: 0; background: transparent;
+  padding: .25rem 0; color: var(--ink); font-weight: 500; cursor: pointer;
 }
-#reminder-form .time-inputs input {
-  flex: 1; width: 100%; margin-top: 0; border: 0; background: transparent;
-  padding: .25rem 0; color: var(--ink); cursor: pointer;
+.schedule-field input::-webkit-datetime-edit { padding: 0; }
+.schedule-field input::-webkit-calendar-picker-indicator { opacity: 0; width: 0; margin: 0; padding: 0; }
+#composer-space {
+  flex: none; position: sticky; bottom: 0;
+  background: var(--surface); border-top: 1px solid var(--line); border-radius: 0 0 .85rem .85rem;
 }
-#reminder-form .time-inputs input::-webkit-datetime-edit { padding: 0; }
-#reminder-form .time-inputs input::-webkit-calendar-picker-indicator { margin-inline: 0; }
-#composer-space { flex: none; background: var(--surface); border-top: 1px solid var(--line); border-radius: 0 0 .85rem .85rem; }
 .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-top: .45rem; }
 .message-input:has(#cancel:not([hidden])) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .message-input label, .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -279,16 +277,18 @@ textarea { resize: vertical; }
 #edit-dialog {
   width: min(32rem, calc(100% - 1.5rem)); max-width: none; max-height: calc(100dvh - 1.5rem);
   padding: 0; border: 0; background: transparent; color: var(--ink); overscroll-behavior: contain;
-  overflow-x: clip;
+  overflow: visible;
 }
+#edit-dialog.from-composer { width: min(41.5rem, calc(100% - 1.5rem)); }
 #edit-surface {
+  max-height: calc(100dvh - 1.5rem); overflow: auto;
   padding: .75rem; border: 1px solid var(--line); border-radius: 1.25rem;
   background: var(--surface);
 }
 #edit-dialog::backdrop { background: rgb(23 19 28 / .48); backdrop-filter: blur(4px); }
 @media (prefers-reduced-motion: no-preference) {
-  #edit-dialog::backdrop { transition: opacity 250ms ease; }
-  #edit-dialog.closing::backdrop { opacity: 0; transition-duration: 180ms; }
+  #edit-dialog::backdrop { transition: opacity 320ms ease; }
+  #edit-dialog.closing::backdrop { opacity: 0; transition-duration: 260ms; }
   @starting-style {
     #edit-dialog[open]::backdrop { opacity: 0; }
   }
@@ -312,8 +312,8 @@ textarea { resize: vertical; }
 #detail p + p { margin-top: .3rem; }
 [hidden] { display: none !important; }
 @media (max-width: 30rem) {
-  .schedule-field { display: block; padding-top: .25rem; }
-  #reminder-form .schedule-field input { font-size: .875rem; }
+  .time-inputs { gap: .65rem; }
+  .schedule-field input { font-size: .875rem; }
   .settings { grid-template-columns: 1fr; }
 }
 @media (max-width: 38rem) {
