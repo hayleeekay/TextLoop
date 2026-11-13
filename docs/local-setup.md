@@ -76,13 +76,15 @@ to this computer; it currently has no authentication.
 
 ## Try a reminder
 
-1. On Home, choose **New reminder**.
-2. Enter a message, the fictional number `+12035550100`, and a time a few minutes ahead.
-3. Save it. Before sending begins, you can try **Edit** or **Withdraw** on its card.
-4. For a reminder left scheduled, wait until it is due, then choose **Refresh** after
-   the next scheduler check. Checks run every minute while the app is running.
+1. Open **Messages** and type a reminder. The local app starts with the fictional
+   number `+12035550100`. You can change it in **Settings**.
+2. The composer starts with tomorrow at 9 AM. To try a reminder sooner, edit the
+   date and time above your message, then tap the send arrow.
+3. Open **Schedule** to edit the reminder before sending begins or withdraw it.
+4. For a reminder left scheduled, wait until it is due. The server checks every
+   minute, and the page updates while it is open.
 5. Find it in **History**, which shows sent and withdrawn reminders for seven days.
-   **Remind me again** schedules a fresh alert with a new future time.
+   **Again** copies the text into Messages, where you can edit it and choose a new time.
 
 “Sent (simulated)” means the fake sender accepted it. No text reaches a phone.
 Replies do not snooze reminders yet. Times use the server's local timezone, so use

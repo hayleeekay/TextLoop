@@ -152,6 +152,33 @@ class ReminderReuseIntegrationTest {
         assertThat(response.getBody()).isEqualTo("{\"code\":\"" + code + "\"}");
     }
 
+    @Test
+    void editedReuseReplaysTheSameSaveAfterTheResultChanges() {
+        var source = source(Source.SENT);
+        var original = sourceRows(source);
+        var operationId = UUID.randomUUID();
+        var time = now().plusDays(1);
+        var edited = new RemindAgainRequest(operationId, source.getVersion(), time, "Updated reminder\nfor tomorrow");
+        var response = save(source, edited);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        var result = response.getBody();
+        assertThat(result.message()).isEqualTo(edited.message());
+        assertThat(result.phoneNumber()).isEqualTo(PHONE);
+        transactions().editReminder(result.id(), new EditReminderRequest("Later edit", time, result.version()));
+
+        var replay = save(source, edited);
+        assertThat(replay.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(replay.getBody().id()).isEqualTo(result.id());
+        assertThat(replay.getBody().message()).isEqualTo("Later edit");
+        assertError(raw(source.getId(), new RemindAgainRequest(operationId, source.getVersion(), time, "Later edit")),
+                HttpStatus.CONFLICT, "OPERATION_CONFLICT");
+        assertThat(raw(source.getId(), new RemindAgainRequest(UUID.randomUUID(), source.getVersion(), time, " \n\t"))
+                .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(sourceRows(source)).isEqualTo(original);
+        assertCounts(2, 3, 1);
+    }
+
     enum Source { READY, UNKNOWN, ACCEPTED, SENT, WITHDRAWN, PERMANENT, RETRYABLE, EXHAUSTED, EXTRA, LEGACY_SENT }
 
     private Reminder source(Source state) {

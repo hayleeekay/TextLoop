@@ -25,11 +25,11 @@ It does not send real texts and is not ready for public use.
 Currently implemented:
 
 - Create reminders through the web app or API and store them in PostgreSQL
-- Edit reminders before sending begins or withdraw them from Home
+- Schedule from Messages, then edit or withdraw reminders from Schedule
 - Check for due reminders every minute and simulate sender acceptance
 - Browse sent and withdrawn reminders from the last seven days in History
-- Use Remind me again to schedule a fresh alert with a new future time
-- Keep unresolved sends visible on Home, with bounded retries and recovery safeguards
+- Use Again to bring a past reminder back into the composer and pick a new time
+- Keep unresolved sends visible in Schedule, with bounded retries and recovery safeguards
 - Run automated tests in GitHub Actions
 
 Simulated reply receipt and a standalone command parser also exist, but replies do

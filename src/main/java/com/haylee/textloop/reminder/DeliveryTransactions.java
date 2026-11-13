@@ -52,7 +52,7 @@ public class DeliveryTransactions {
         var previous = reuses.findBySourceReminderIdAndOperationId(id, request.operationId());
         if (previous.isPresent()) {
             // Replay resolves an already committed save, even after its time or source version changes.
-            if (!previous.get().matches(request.expectedVersion(), scheduledAt)) {
+            if (!previous.get().matches(request.expectedVersion(), scheduledAt, request.message())) {
                 throw new ReminderMutationException(ReminderMutationException.Reason.OPERATION_CONFLICT);
             }
             return previous.get().getResultReminder();
@@ -78,8 +78,10 @@ public class DeliveryTransactions {
             }
         }
         requireFutureSchedule(scheduledAt);
-        Reminder result = persistReminder(source.getMessage(), source.getPhoneNumber(), scheduledAt);
-        reuses.save(new ReminderReuse(source, request.operationId(), request.expectedVersion(), scheduledAt, result));
+        String message = request.message() == null ? source.getMessage() : request.message();
+        Reminder result = persistReminder(message, source.getPhoneNumber(), scheduledAt);
+        reuses.save(new ReminderReuse(source, request.operationId(), request.expectedVersion(),
+                scheduledAt, request.message(), result));
         return result;
     }
 

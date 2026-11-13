@@ -194,8 +194,8 @@ the current reminder and version before deciding whether another correction is n
 
 `POST /api/reminders/{id}/remind-again`
 
-Schedule one fresh reminder with the source's message and phone number, preserving
-the source and its delivery evidence. Saving sends no confirmation text. Browsing
+Schedule one fresh reminder for the source's phone number, preserving the source
+and its delivery evidence. Saving sends no confirmation text. Browsing
 reminders or prefilling a form schedules nothing.
 
 ```json
@@ -206,8 +206,9 @@ reminders or prefilling a form schedules nothing.
 }
 ```
 
-All fields are required. `operationId` is a client-generated UUID for one save;
-retain it across retries. `expectedVersion` is the source's current nonnegative
+The fields above are required. Include an optional `message` to schedule edited
+text. Omitting it copies the original message. `operationId` is a client-generated
+UUID for one save. Retain it across retries. `expectedVersion` is the source's current nonnegative
 integer version. Supply an explicit new server-local time. Fractional seconds are
 truncated to microseconds before comparison and storage; that stored time must be
 strictly after the full current clock after the database locks are acquired.
@@ -230,10 +231,10 @@ fresh delivery uses the normal retry policy. The source's snapshots and budget s
 unchanged. The new reminder can be edited or withdrawn using the existing endpoints.
 
 A successful save durably binds the source ID and operation UUID to the requested
-version, canonical time, and result. Repeating that request returns the same result's
-current representation, including later edits, withdrawal, or sending. Replay still
-works after restart, source finalization, or the requested time passing; it creates
-nothing. Reusing that source/key with a different version or canonical time returns
+version, canonical time, optional message, and result. Repeating that request
+returns the same result's current representation, including later edits, withdrawal,
+or sending. Replay still works after restart, source finalization, or the requested
+time passing. Reusing that source/key with a different version, time, or message returns
 `409 OPERATION_CONFLICT`. A new UUID deliberately schedules a separate alert. UUIDs
 are scoped to each source, and successful bindings do not expire.
 
