@@ -84,7 +84,7 @@ to this computer; it currently has no authentication.
 4. For a reminder left scheduled, wait until it is due. The server checks every
    minute, and the page updates while it is open.
 5. Find it in **History**, which shows sent and withdrawn reminders for seven days.
-   **Again** copies the text into Messages, where you can edit it and choose a new time.
+   **Reuse** copies the text into Messages, where you can edit it and choose a new time.
 
 “Sent (simulated)” means the fake sender accepted it. No text reaches a phone.
 Replies do not snooze reminders yet. Times use the server's local timezone, so use

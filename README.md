@@ -28,7 +28,7 @@ Currently implemented:
 - Schedule from Messages, then edit or withdraw reminders from Schedule
 - Check for due reminders every minute and simulate sender acceptance
 - Browse sent and withdrawn reminders from the last seven days in History
-- Use Again to bring a past reminder back into the composer and pick a new time
+- Use Reuse to bring a past reminder back into the composer and pick a new time
 - Keep unresolved sends visible in Schedule, with bounded retries and recovery safeguards
 - Run automated tests in GitHub Actions
 

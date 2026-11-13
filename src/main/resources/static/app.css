@@ -13,7 +13,9 @@
   --on-primary: light-dark(oklch(.99 0 0), oklch(.23 var(--chroma) var(--hue)));
   --tint: light-dark(oklch(.91 calc(var(--chroma) * 1.5) var(--hue)), oklch(.36 calc(var(--chroma) * 1.3) var(--hue)));
   --accent: var(--tint);
-  --next: var(--surface);
+  --next: color-mix(in srgb, var(--tint) 79%, var(--primary));
+  --withdrawn: color-mix(in srgb, var(--surface) 89%, var(--soft));
+  --secondary-button: color-mix(in srgb, var(--surface) 52%, var(--tint));
   --sent: var(--tint);
   --scheduled: var(--tint);
   --time-band: light-dark(color-mix(in srgb, var(--surface) 75%, var(--tint)),
@@ -129,15 +131,15 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .35rem .65rem;
   background: var(--sent);
 }
-#history .reminder-card[data-feedback="WITHDRAWN"] { background: var(--surface); }
+#history .reminder-card.withdrawn { background: var(--withdrawn); }
 #history .reminder-card > :not(.actions) { grid-column: 1; }
 #history .reminder-card > .actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 #history .meta { margin: 0; }
 .message { white-space: pre-wrap; overflow-wrap: anywhere; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .65rem; margin: .35rem 0 .65rem; color: var(--soft); font-size: .875rem; }
-.badge { padding: .1rem .5rem; border-radius: 1rem; background: var(--surface); color: var(--soft); font-size: .8rem; }
-.badge.attention, .attention-text { color: var(--warn); }
-.badge.attention { background: var(--butter); }
+.reminder-card .actions button, .bubble-meta button { background: var(--secondary-button); }
+.reminder-card .actions button:hover, .bubble-meta button:hover { background: var(--tint); }
+.attention-text { color: var(--warn); }
 .attention-text { margin-bottom: .6rem; }
 .empty { padding: 1.2rem 0; }
 .empty h2 { margin-bottom: .35rem; }
@@ -206,7 +208,7 @@ textarea { resize: vertical; }
 .contact h1 { font-size: 1.6rem; }
 .avatar {
   display: grid; place-items: center; width: 2.85rem; aspect-ratio: 1; border-radius: 50%;
-  background: var(--accent); font: 1.55rem Georgia, serif;
+  background: var(--primary); color: var(--on-primary); font: 600 1.2rem/1 system-ui, sans-serif;
 }
 #conversation { flex: 1; display: flex; flex-direction: column; }
 #thread {
@@ -221,17 +223,16 @@ textarea { resize: vertical; }
 .bubble-meta button { margin-block: -.15rem; padding-inline: .4rem; }
 .composer .panel {
   position: sticky; bottom: 0; z-index: 1; border: 0; border-top: 1px solid var(--line);
-  padding: .65rem 1rem; border-radius: 0 0 1.35rem 1.35rem; background: var(--paper);
+  padding: .65rem 1rem; border-radius: 0 0 1.35rem 1.35rem; background: var(--accent);
 }
 .composer fieldset {
-  max-width: 40rem; margin-inline: auto; padding: .35rem;
-  border: 1px solid var(--control); border-radius: 1.25rem; background: var(--accent);
+  max-width: 40rem; margin-inline: auto;
 }
 .time-inputs { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: .5rem; }
 .time-inputs label { min-width: 0; margin: 0; font-size: .8125rem; }
 .time-inputs input { margin-top: .15rem; padding-inline: .35rem; font-size: 1rem; font-weight: 500; }
 .composer .time-inputs {
-  padding: .35rem .5rem .2rem; border: 1px solid var(--line); border-radius: .85rem;
+  padding: .35rem .65rem .2rem; border-bottom: 1px solid var(--line); border-radius: .65rem .65rem 0 0;
   background: var(--time-band);
 }
 .composer .time-inputs input { border: 0; background: transparent; padding-inline: 0; }

@@ -74,9 +74,9 @@ function deliveryText(reminder) {
     case 'WITHDRAWN': return 'Withdrawn. This reminder is no longer active.';
     case 'RETRY_WAITING': return reminder.withdrawnAt ? 'The last attempt was rejected. Further attempts have been stopped.'
       : 'Waiting to retry, no earlier than ' + localTime(reminder.nextAttemptAt) + '.';
-    case 'RETRY_EXHAUSTED': return reminder.withdrawnAt ? 'Sending attempts stopped. You can choose Remind me again.'
+    case 'RETRY_EXHAUSTED': return reminder.withdrawnAt ? 'Sending attempts stopped. You can choose Reuse.'
       : 'Sending attempts stopped. Delivery review is needed before another attempt.';
-    case 'PERMANENT_REJECTION': return 'The sender rejected this alert. You can choose Remind me again.';
+    case 'PERMANENT_REJECTION': return 'The sender rejected this alert. You can choose Reuse.';
     case 'DELIVERY_UNCERTAIN': return 'Sending could not be confirmed. Delivery review is needed before scheduling again.';
     case 'LEGACY_SENT': return 'Previously marked sent. Acceptance evidence is unavailable.';
     case 'UNTRACKED':
@@ -358,22 +358,20 @@ async function reviewCurrentReminder() {
 function renderCard(reminder, name) {
   const row = node('li', undefined, 'reminder-card');
   row.dataset.feedback = reminder.feedback;
+  if (reminder.withdrawnAt) row.classList.add('withdrawn');
   row.append(node('h2', reminder.message, 'message'));
-  const labels = { WAITING: 'Waiting to send',
-    ACCEPTED: 'Sent (simulated)', WITHDRAWN: 'Withdrawn', RETRY_WAITING: 'Retry scheduled',
+  const labels = { ACCEPTED: 'Sent (simulated)', RETRY_WAITING: 'Retry scheduled',
     RETRY_EXHAUSTED: 'Sending stopped', PERMANENT_REJECTION: 'Not sent',
     DELIVERY_UNCERTAIN: 'Needs review', LEGACY_SENT: 'Previously sent',
     UNTRACKED: 'Needs review', INCONSISTENT_DELIVERY: 'Needs review' };
   const attention = ['RETRY_WAITING', 'RETRY_EXHAUSTED', 'PERMANENT_REJECTION',
     'DELIVERY_UNCERTAIN', 'UNTRACKED', 'INCONSISTENT_DELIVERY'].includes(reminder.feedback);
   const meta = node('div', undefined, 'meta');
-  const time = reminder.withdrawnAt
-    ? 'Withdrawn ' + displayTime(reminder.withdrawnAt)
-    : displayTime(reminder.scheduledAt);
-  meta.append(node('span', time));
-  if (!reminder.withdrawnAt && reminder.feedback !== 'WAITING') {
-    meta.append(node('span', labels[reminder.feedback] ?? 'Needs review', attention ? 'badge attention' : 'badge'));
-  }
+  const status = reminder.withdrawnAt ? 'Withdrawn'
+    : reminder.feedback === 'WAITING' ? '' : labels[reminder.feedback] ?? 'Needs review';
+  const time = displayTime(reminder.withdrawnAt ?? reminder.scheduledAt);
+  const dateLabel = status && !reminder.withdrawnAt ? 'Scheduled for ' + time : time;
+  meta.append(node('span', status ? status + ' · ' + dateLabel : dateLabel));
   if (reminder.phoneNumber !== recipient) meta.append(node('span', 'To ' + reminder.phoneNumber));
   row.append(meta);
   if (attention) row.append(node('p', deliveryText(reminder), 'attention-text'));
@@ -381,10 +379,9 @@ function renderCard(reminder, name) {
   if (reminder.canEdit) actions.append(button('Edit', () => openAction('edit', reminder.id)));
   if (name === 'upcoming' && reminder.canWithdraw) actions.append(button('Withdraw', () => openAction('withdraw', reminder.id)));
   if (reminder.canRemindAgain) {
-    const again = button('Again', () => openAction('reuse', reminder.id));
-    again.className = 'again';
-    again.setAttribute('aria-label', 'Again: schedule ' + reminder.message);
-    actions.append(again);
+    const reuse = button('Reuse', () => openAction('reuse', reminder.id));
+    reuse.setAttribute('aria-label', 'Reuse reminder: ' + reminder.message);
+    actions.append(reuse);
   }
   for (const action of actions.children) action.dataset.selection = '';
   if (actions.children.length) row.append(actions);
@@ -425,7 +422,6 @@ function renderThread() {
     details.append(node('span', status));
     if (reminder.canEdit) {
       const edit = button('Edit', () => openAction('edit', reminder.id));
-      edit.className = 'quiet';
       edit.dataset.selection = '';
       edit.setAttribute('aria-label', 'Edit ' + reminder.message);
       details.append(edit);
@@ -605,7 +601,7 @@ function clearRetry() {
     pendingReuse = null; retryStorageBlocked = false;
   } catch {
     retryStorageBlocked = true;
-    notice('Could not update the saved retry. Try reloading this page before using Remind me again.');
+    notice('Could not update the saved retry. Try reloading this page before using Reuse.');
   }
   renderRetry();
 }
@@ -616,7 +612,7 @@ function renderRetry() {
   panel.replaceChildren();
   if (panel.hidden) return;
   panel.append(node('p', pendingReuse
-    ? 'A saved Remind me again request is available. Retry checks that same save, without creating a second alert if it already succeeded.'
+    ? 'A saved reuse request is available. Retrying checks the same save without creating a second reminder.'
     : 'Saved retry information is unavailable. Check Schedule and History before scheduling again.'));
   const actions = node('div', undefined, 'actions');
   if (pendingReuse) {
