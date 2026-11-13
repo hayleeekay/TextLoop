@@ -38,12 +38,10 @@
           <div class="schedule-field">
             <label for="send-date">Date</label>
             <input id="send-date" type="date" required>
-            <button type="button" class="picker-button calendar quiet" data-picker="send-date" aria-label="Open date picker" hidden></button>
           </div>
           <div class="schedule-field">
             <label for="send-time">Time</label>
             <input id="send-time" type="time" step="60" required>
-            <button type="button" class="picker-button clock quiet" data-picker="send-time" aria-label="Open time picker" hidden></button>
           </div>
         </div>
         <div class="message-input">
@@ -54,6 +52,7 @@
         </div>
       </fieldset>
     </form>
+    <div id="composer-space" aria-hidden="true" hidden></div>
   </section>
   <div id="form-feedback" role="status" aria-live="polite"></div>
   <section id="detail" hidden tabindex="-1" aria-label="Current saved version"></section>

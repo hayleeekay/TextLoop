@@ -223,7 +223,6 @@ textarea { resize: vertical; }
 .bubble.scheduled { border-style: dashed; background: var(--scheduled-bubble); }
 .bubble-time { margin-bottom: .25rem; text-align: center; }
 .bubble-meta { margin-top: .2rem; text-align: right; }
-.is-editing { visibility: hidden; }
 .bubble-more {
   flex: 0 0 2.75rem; width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.25rem;
 }
@@ -250,32 +249,21 @@ textarea { resize: vertical; }
 .time-inputs { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: .5rem; }
 .time-inputs label { min-width: 0; margin: 0; font-size: .8125rem; }
 .time-inputs input { margin-top: .15rem; padding-inline: .35rem; font-size: 1rem; font-weight: 500; }
-#reminder-form .time-inputs {
-  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
-  gap: .65rem;
-  padding: 0 .65rem;
-  border-radius: .75rem;
+.schedule-field {
+  display: flex; min-width: 0; align-items: center; gap: .35rem;
+  padding: 0 .65rem; border: 1px solid var(--line); border-radius: .75rem;
   background: var(--selection);
 }
-.schedule-field { display: flex; min-width: 0; align-items: center; gap: .3rem; }
 .schedule-field label {
   color: var(--soft);
 }
 #reminder-form .time-inputs input {
-  width: auto; max-width: 100%; margin-top: 0; border: 0; background: transparent;
-  padding: .25rem 0; color: var(--ink);
+  flex: 1; width: 100%; margin-top: 0; border: 0; background: transparent;
+  padding: .25rem 0; color: var(--ink); cursor: pointer;
 }
 #reminder-form .time-inputs input::-webkit-datetime-edit { padding: 0; }
-#reminder-form .time-inputs input::-webkit-calendar-picker-indicator { order: -1; margin-inline: 0 .35rem; }
-#reminder-form .schedule-field:has(.picker-button:not([hidden])) input::-webkit-calendar-picker-indicator { display: none; }
-.picker-button { display: grid; place-items: center; position: relative; flex: none; width: 2.75rem; padding: 0; border-radius: .5rem; }
-.picker-button::before { content: ""; width: .9rem; height: .9rem; border: 1.5px solid currentColor; }
-.picker-button.calendar::before { border-radius: .18rem; border-block-start-width: 3px; }
-.picker-button.clock::before { border-radius: 50%; }
-.picker-button.clock::after {
-  content: ""; position: absolute; width: .22rem; height: .3rem; left: 50%; bottom: 50%;
-  border: solid currentColor; border-width: 0 0 1.5px 1.5px;
-}
+#reminder-form .time-inputs input::-webkit-calendar-picker-indicator { margin-inline: 0; }
+#composer-space { flex: none; background: var(--surface); border-top: 1px solid var(--line); border-radius: 0 0 .85rem .85rem; }
 .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-top: .45rem; }
 .message-input:has(#cancel:not([hidden])) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .message-input label, .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -299,18 +287,14 @@ textarea { resize: vertical; }
 }
 #edit-dialog::backdrop { background: rgb(23 19 28 / .48); backdrop-filter: blur(4px); }
 @media (prefers-reduced-motion: no-preference) {
-  #edit-dialog::backdrop { transition: opacity 310ms ease; }
-  #edit-dialog.closing::backdrop { opacity: 0; transition-duration: 240ms; }
+  #edit-dialog::backdrop { transition: opacity 250ms ease; }
+  #edit-dialog.closing::backdrop { opacity: 0; transition-duration: 180ms; }
   @starting-style {
     #edit-dialog[open]::backdrop { opacity: 0; }
   }
 }
 #edit-dialog .panel { padding: 0; border: 0; }
-#edit-dialog .time-inputs { border: 1px dashed var(--control); }
 #edit-dialog #notice { margin-block: .75rem 0; }
-.bubble-flight {
-  position: fixed; z-index: 3; max-width: none; overflow: hidden; pointer-events: none;
-}
 #notice:empty, #form-feedback:empty { display: none; }
 #toast {
   position: fixed; z-index: 2; inset-block-start: 4.25rem; inset-inline-end: 1rem;
@@ -328,8 +312,7 @@ textarea { resize: vertical; }
 #detail p + p { margin-top: .3rem; }
 [hidden] { display: none !important; }
 @media (max-width: 30rem) {
-  .schedule-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0; }
-  .schedule-field label { grid-column: 1 / -1; }
+  .schedule-field { display: block; padding-top: .25rem; }
   #reminder-form .schedule-field input { font-size: .875rem; }
   .settings { grid-template-columns: 1fr; }
 }

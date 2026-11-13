@@ -20,8 +20,7 @@ let detailRead = 0;
 const listReads = { upcoming: 0, history: 0 };
 let pendingReuse = null;
 let retryStorageBlocked = false;
-let composerDraft = { mode: 'create' };
-let draftBeforeAction = null;
+let composerDraft = {};
 let savingNumber = false;
 let numberRead = 0;
 const loaded = { upcoming: null, history: null };
@@ -124,13 +123,13 @@ function isReminder(value) {
 }
 
 function controls() {
-  const closingEdit = editDialog.classList.contains('closing');
-  $('fields').disabled = saving || closingEdit || uncertainCreate || (mode === 'reuse' && pendingReuse !== null);
-  $('save').disabled = saving || closingEdit || needsReview || (mode === 'reuse' && (pendingReuse !== null || retryStorageBlocked));
+  const closing = editDialog.classList.contains('closing');
+  $('fields').disabled = saving || closing || uncertainCreate || (mode === 'reuse' && pendingReuse !== null);
+  $('save').disabled = saving || closing || needsReview || (mode === 'reuse' && (pendingReuse !== null || retryStorageBlocked));
   $('new-reminder').disabled = saving || uncertainCreate;
   document.querySelectorAll('[data-navigation]').forEach((item) => { item.disabled = saving || savingNumber; });
   document.querySelectorAll('[data-selection]').forEach((item) => { item.disabled = saving || uncertainCreate; });
-  $('saved-retry').querySelectorAll('button').forEach((item) => { item.disabled = saving || savingNumber; });
+  $('saved-retry').querySelectorAll('button').forEach((item) => { item.disabled = saving || savingNumber || closing; });
 }
 
 function navigation(id) {
@@ -167,15 +166,15 @@ function resizeMessage() {
 }
 
 function rememberComposer() {
-  if ($('editor').hidden) return;
+  if (mode !== 'create' || $('editor').hidden) return;
   composerDraft = {
-    mode, selected, originalMessageDisplay, dirty, needsReview,
+    dirty,
     text: $('message').value, date: $('send-date').value, time: $('send-time').value
   };
 }
 
 function canLeave() {
-  if (saving || savingNumber) return false;
+  if (saving || savingNumber || editDialog.classList.contains('closing')) return false;
   if (uncertainCreate) {
     notice('This save might have succeeded. Check Schedule and History, then choose Start again after checking.');
     return false;
@@ -193,7 +192,7 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   needsReview = draft.needsReview ?? false;
   feedback.replaceChildren();
   $('detail').hidden = true;
-  if (nextMode !== 'edit') {
+  if (nextMode === 'create') {
     $('browse').hidden = true;
     $('settings').hidden = true;
     $('editor').hidden = false;
@@ -203,7 +202,6 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('cancel').hidden = nextMode === 'create';
   $('cancel').setAttribute('aria-label', nextMode === 'edit' ? 'Cancel edit' : 'Cancel reuse');
   $('message-label').textContent = nextMode === 'edit' ? 'Edit message' : 'Message';
-  updateThreadEditing();
   $('message').value = draft.text ?? reminder?.message ?? '';
   originalMessageDisplay = draft.originalMessageDisplay ?? $('message').value;
   const [date, time] = (nextMode === 'edit' ? reminder.scheduledAt.slice(0, 16)
@@ -212,11 +210,16 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('send-time').value = draft.time ?? time ?? '';
   $('save').textContent = nextMode === 'edit' ? '✓' : '↑';
   $('save').setAttribute('aria-label', nextMode === 'edit' ? 'Save changes' : 'Schedule text');
-  if (nextMode !== 'edit') navigation('messages-tab');
-  if (nextMode === 'edit' && !editDialog.open) {
+  if (nextMode === 'create') {
+    navigation('messages-tab');
+  } else {
+    editDialog.setAttribute('aria-label', nextMode === 'edit' ? 'Edit reminder' : 'Reuse reminder');
     editSurface.append(form, $('notice'), feedback, $('detail'));
-    $('message').setAttribute('autofocus', '');
+    const firstField = nextMode === 'reuse' ? $('send-date') : $('message');
+    firstField.setAttribute('autofocus', '');
     editDialog.showModal();
+    firstField.removeAttribute('autofocus');
+    animateComposer();
   }
   resizeMessage();
   if (needsReview) reviewRequired('Review the saved reminder before saving again.');
@@ -238,41 +241,34 @@ function openMessages() {
     return;
   }
   rememberComposer();
-  showForm(composerDraft.mode, composerDraft.selected, { draft: composerDraft });
+  showForm('create', null, { draft: composerDraft });
 }
 
 function finishComposer() {
-  const fromSchedule = editDialog.open && !$('browse').hidden;
-  const editedId = selected?.id;
-  composerDraft = draftBeforeAction ?? { mode: 'create' };
-  draftBeforeAction = null;
-  if (fromSchedule) {
+  if (editDialog.open && !$('browse').hidden) {
+    const reminderId = selected.id;
     closeEditDialog();
-    showBrowse('upcoming', true, { focus: false });
-    updateThreadEditing();
-    focusScheduleAction(editedId);
+    showBrowse(activeView, true, { focus: false });
+    focusCardAction(activeView, reminderId);
     return;
   }
-  showForm(composerDraft.mode, composerDraft.selected, { reviewed: true, draft: composerDraft });
+  showForm('create', null, { reviewed: true, draft: composerDraft, focus: !editDialog.open });
 }
 
 function threadRow(id) {
   return $('thread').querySelector(`[data-reminder-id="${id}"]`);
 }
 
-function updateThreadEditing() {
-  $('thread').querySelector('.is-editing')?.classList.remove('is-editing');
-  if (mode === 'edit') threadRow(selected.id)?.classList.add('is-editing');
-}
-
 function closeEditDialog() {
   if (!editDialog.open) return;
   editDialog.close();
   editDialog.classList.remove('closing');
-  $('message').removeAttribute('autofocus');
   $('editor').append(form);
+  $('composer-space').hidden = true;
   $('toast').before($('notice'));
+  $('editor').before($('saved-retry'));
   $('editor').after(feedback, $('detail'));
+  renderRetry();
 }
 
 function visibleBounds(element) {
@@ -281,35 +277,11 @@ function visibleBounds(element) {
   return null;
 }
 
-function animateBubble(text, from, to, duration) {
-  if (!from || !to) return;
-  const bubble = node('div', text, 'message bubble scheduled bubble-flight');
-  bubble.setAttribute('aria-hidden', 'true');
-  Object.assign(bubble.style, {
-    left: from.left + 'px', top: from.top + 'px', width: from.width + 'px', height: from.height + 'px'
-  });
-  editDialog.append(bubble);
-  const animation = bubble.animate([
-    { transform: 'none', opacity: 1 },
-    {
-      transform: `translate(${to.left - from.left}px, ${to.top - from.top}px)`,
-      width: to.width + 'px', height: to.height + 'px', opacity: 0
-    }
-  ], { duration, easing: 'cubic-bezier(.4,0,.2,1)' });
-  animation.finished.then(() => bubble.remove(), () => bubble.remove());
-}
-
-function animateEditOpen(reminder, origin) {
+function animateComposer() {
   if (!editMotion.matches) return;
-  const duration = 310;
-  const message = $('message');
-  const destination = visibleBounds(message);
-  if (origin && destination) {
-    animateBubble(reminder.message, origin, destination, duration);
-    editSurface.animate([{ opacity: 0 }, { opacity: 0, offset: .55 }, { opacity: 1 }], { duration });
-  } else {
-    editSurface.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 210, easing: 'ease-out' });
-  }
+  editSurface.animate(
+    [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
+    { duration: 250, easing: 'cubic-bezier(.2,.75,.3,1)' });
 }
 
 function focusEditedMessage(id) {
@@ -317,36 +289,33 @@ function focusEditedMessage(id) {
   (visibleBounds(trigger) ? trigger : $('conversation-title')).focus();
 }
 
-function focusScheduleAction(id) {
-  const action = $('upcoming').querySelector(`[data-reminder-id="${id}"] .bubble-more`);
-  (action ?? $('view-title')).focus();
+function focusCardAction(view, id) {
+  const action = $(view).querySelector(`[data-reminder-id="${id}"] [data-selection]`);
+  if (action) action.focus({ preventScroll: true });
+  else $('view-title').focus();
 }
 
-async function finishEdit(text) {
+async function finishDialog() {
+  const editedId = mode === 'edit' ? selected.id : null;
   editDialog.classList.add('closing');
   controls();
+  let fade;
   if (editMotion.matches) {
-    const duration = 240;
-    const message = $('message');
-    editDialog.querySelector('.bubble-flight')?.remove();
+    const { opacity, transform } = getComputedStyle(editSurface);
+    const current = { opacity, transform };
     editSurface.getAnimations().forEach((animation) => animation.cancel());
-    animateBubble(text, visibleBounds(message), visibleBounds(threadRow(selected.id)?.querySelector('.bubble')), duration);
-    const fade = editSurface.animate([{ opacity: 1 }, { opacity: 0 }],
-      { duration, easing: 'ease-in-out', fill: 'forwards' });
+    fade = editSurface.animate([current, { opacity: 0, transform: 'translateY(6px)' }],
+      { duration: 180, easing: 'ease-in', fill: 'forwards' });
     await fade.finished.catch(() => {});
-    finishComposer();
-    fade.cancel();
-    return;
   }
   finishComposer();
+  fade?.cancel();
+  if (editedId !== null && !$('editor').hidden) focusEditedMessage(editedId);
 }
 
-async function cancelComposer() {
+function cancelComposer() {
   if (saving || editDialog.classList.contains('closing')) return;
-  const id = mode === 'edit' ? selected.id : null;
-  if (id === null) return finishComposer();
-  await finishEdit(selected.message);
-  if (!$('editor').hidden) focusEditedMessage(id);
+  void finishDialog();
 }
 
 function showBrowse(name = activeView, saved = false, { focus = true } = {}) {
@@ -426,12 +395,16 @@ function reminderMenu(reminder, available) {
 
 async function openAction(nextMode, id) {
   if (!canLeave()) return;
+  if (nextMode === 'reuse' && (pendingReuse || retryStorageBlocked)) {
+    notice('Resolve the saved retry before starting another reminder from Reuse.');
+    return;
+  }
   if (needsReview && selected?.id === id) {
     notice('Review the current reminder before making another change.');
     return;
   }
   const read = ++detailRead;
-  if (nextMode !== 'edit') notice('Loading reminder...');
+  if (nextMode === 'withdraw') notice('Loading reminder...');
   try {
     const reminder = await request('/' + id);
     if (read !== detailRead) return;
@@ -447,12 +420,12 @@ async function openAction(nextMode, id) {
       await mutate('withdraw', reminder.id, { expectedVersion: reminder.version });
     } else {
       rememberComposer();
-      if (composerDraft.mode === 'create') draftBeforeAction = composerDraft;
-      else if (composerDraft.dirty && !window.confirm('Discard the unfinished changes in Messages?')) return;
-      const origin = nextMode === 'edit' ? visibleBounds(threadRow(id)?.querySelector('.bubble')) : null;
+      if (!$('editor').hidden) {
+        const space = $('composer-space');
+        space.style.height = form.getBoundingClientRect().height + 'px';
+        space.hidden = false;
+      }
       showForm(nextMode, reminder, { reviewed: true });
-      if (nextMode === 'edit') animateEditOpen(reminder, origin);
-      rememberComposer();
     }
   } catch {
     if (read === detailRead) notice('Could not refresh this reminder. Try again before making a change.');
@@ -572,7 +545,6 @@ function renderThread() {
     thread.append(item);
   }
   if (!visible.length && loaded.upcoming && loaded.history) thread.append(node('li', 'No messages yet.', 'hint thread-empty'));
-  updateThreadEditing();
   if (focusedRow) focusEditedMessage(focusedRow.dataset.reminderId);
 }
 
@@ -600,11 +572,11 @@ async function refreshList(name, background = false) {
     const empty = node('div', undefined, 'empty');
     empty.append(node('h2', name === 'upcoming' ? 'No reminders waiting' : 'Nothing here yet.'));
     if (name === 'upcoming') empty.append(node('p', 'Schedule a text whenever you need a reminder.', 'hint'));
-    const focusedReminder = name === 'upcoming' && target.contains(document.activeElement)
+    const focusedReminder = target.contains(document.activeElement)
       ? document.activeElement.closest('.reminder-card')?.dataset.reminderId : null;
     target.replaceChildren(reminders.length ? list : empty);
     controls();
-    if (focusedReminder) focusScheduleAction(focusedReminder);
+    if (focusedReminder) focusCardAction(name, focusedReminder);
     return true;
   } catch {
     if (!background && loaded[name] === null && read === listReads[name]) {
@@ -645,7 +617,7 @@ function createUncertainty() {
   const close = button('Close draft', () => {
     if (!checkedCreate || !window.confirm('Close this unsaved draft? Any reminder already saved will stay scheduled.')) return;
     uncertainCreate = false; checkedCreate = false; dirty = false;
-    composerDraft = { mode: 'create' };
+    composerDraft = {};
     showBrowse(activeView, true);
     notice('Draft closed. Saved reminders are unchanged.');
   });
@@ -676,7 +648,7 @@ function mutationError(kind, failure) {
   if (uncertain && kind === 'create') {
     uncertainCreate = true; checkedCreate = false; createUncertainty();
   } else if (kind === 'reuse' && uncertain) {
-    feedback.replaceChildren(node('p', 'The save might have succeeded. Use Retry this save to check the same alert.'));
+    feedback.replaceChildren();
   } else if (uncertain) {
     reviewRequired('The save might have succeeded. Review the current reminder before making another change.');
   } else if (failure.code === 'STALE_VERSION') {
@@ -730,7 +702,6 @@ function storeRetry(value) {
     sessionStorage.setItem(retryKey, JSON.stringify(value));
     if (sessionStorage.getItem(retryKey) !== JSON.stringify(value)) throw {};
     pendingReuse = Object.freeze(value);
-    renderRetry();
     return true;
   } catch {
     retryStorageBlocked = true;
@@ -755,20 +726,22 @@ function clearRetry() {
 
 function renderRetry() {
   const panel = $('saved-retry');
+  if (editDialog.open && mode === 'reuse') editSurface.append(panel);
   panel.hidden = pendingReuse === null && !retryStorageBlocked;
   panel.replaceChildren();
   if (panel.hidden) return;
   panel.append(node('p', pendingReuse
-    ? 'A saved reuse request is available. Retrying checks the same save without creating a second reminder.'
+    ? 'The reminder may already be scheduled. Retry this save to check without creating a second reminder.'
     : 'Saved retry information is unavailable. Check Schedule and History before scheduling again.'));
   const actions = node('div', undefined, 'actions');
   if (pendingReuse) {
     const retry = button('Retry this save', () => {
       if (!canLeave()) return;
       const { sourceId, ...body } = pendingReuse;
-      rememberComposer();
-      showBrowse(activeView, true);
-      mode = 'view'; selected = { id: sourceId }; dirty = false; needsReview = false;
+      if (!editDialog.open) {
+        showBrowse(activeView);
+        selected = { id: sourceId };
+      }
       mutate('reuse', sourceId, body);
     });
     retry.disabled = saving;
@@ -777,6 +750,7 @@ function renderRetry() {
   const clear = button('Clear saved retry', () => {
     if (saving || !window.confirm('The earlier save might already exist. Check Schedule and History before scheduling another alert. Stop keeping this retry?')) return;
     clearRetry(); controls();
+    if (editDialog.open && !pendingReuse && !retryStorageBlocked) void finishDialog();
   });
   clear.disabled = saving;
   actions.append(clear);
@@ -791,29 +765,36 @@ async function mutate(kind, id, body) {
   notice('');
   toast('Saving…');
   let saved;
+  let retryAvailable = false;
   try {
     saved = await request(kind === 'create' ? '' : '/' + id + (kind === 'edit' ? '' : kind === 'reuse' ? '/remind-again' : '/withdraw'),
       kind === 'edit' ? 'PUT' : 'POST', body);
   } catch (failure) {
     toast('');
     // A definitive refusal cannot have committed this request. A key conflict needs manual review.
-    if (kind === 'reuse' && failure.status >= 400 && failure.status < 500 && failure.code !== 'OPERATION_CONFLICT') clearRetry();
+    if (kind === 'reuse') {
+      if (failure.status >= 400 && failure.status < 500 && failure.code !== 'OPERATION_CONFLICT') clearRetry();
+      else {
+        renderRetry();
+        retryAvailable = pendingReuse !== null;
+      }
+    }
     mutationError(kind, failure);
     return;
   } finally {
     saving = false;
     controls();
+    if (retryAvailable) $('saved-retry').querySelector('button')?.focus();
   }
   if (kind === 'reuse') clearRetry();
   dirty = false; needsReview = false;
-  if (kind === 'edit') {
-    await finishEdit(saved.message);
-  } else if (kind === 'create' || (kind === 'reuse' && composerDraft.mode === 'reuse' && composerDraft.selected?.id === id)) {
+  if (editDialog.open) {
+    await finishDialog();
+  } else if (kind === 'create') {
+    composerDraft = {};
     finishComposer();
-  } else if (kind === 'reuse') {
-    showForm(composerDraft.mode, composerDraft.selected, { reviewed: true, draft: composerDraft });
-  } else {
-    showBrowse(kind === 'withdraw' ? 'history' : 'upcoming', true);
+  } else if (kind === 'withdraw') {
+    showBrowse('history', true);
   }
   const savedText = kind === 'withdraw' ? 'Reminder withdrawn.' : kind === 'edit' ? 'Changes saved.' : 'Reminder scheduled.';
   toast(savedText, 4000);
@@ -823,9 +804,6 @@ async function mutate(kind, id, body) {
     controls();
   }
   await refreshLists();
-  if (kind === 'edit' && mode === 'create' && document.activeElement === $('conversation-title')) {
-    focusEditedMessage(id);
-  }
 }
 
 form.addEventListener('input', (event) => {
@@ -833,16 +811,15 @@ form.addEventListener('input', (event) => {
   ++detailRead;
   if (event.target === $('message')) resizeMessage();
 });
-for (const picker of form.querySelectorAll('[data-picker]')) {
-  const input = $(picker.dataset.picker);
+for (const input of [$('send-date'), $('send-time')]) {
   if (typeof input.showPicker !== 'function') continue;
-  picker.hidden = false;
-  picker.addEventListener('click', () => {
-    input.focus();
+  input.closest('.schedule-field').addEventListener('click', (event) => {
+    if (input.matches(':disabled')) return;
     try {
       input.showPicker();
+      event.preventDefault();
     } catch {
-      // Keep direct entry available if the browser cannot open a picker here.
+      input.focus();
     }
   });
 }
@@ -859,7 +836,6 @@ form.addEventListener('submit', async (event) => {
     }
     const saved = { sourceId: selected.id, expectedVersion: selected.version, operationId, scheduledAt: newSchedule(time) };
     if ($('message').value !== originalMessageDisplay) saved.message = $('message').value;
-    rememberComposer();
     if (!storeRetry(saved)) return;
     const { sourceId, ...body } = saved;
     await mutate('reuse', sourceId, body);
@@ -988,7 +964,7 @@ window.addEventListener('resize', resizeMessage);
 document.addEventListener('visibilitychange', refreshInBackground);
 setInterval(refreshInBackground, 60000);
 window.addEventListener('beforeunload', (event) => {
-  if (saving || savingNumber || uncertainCreate || dirty || composerDraft.dirty || draftBeforeAction?.dirty) {
+  if (saving || savingNumber || uncertainCreate || dirty || composerDraft.dirty) {
     event.preventDefault(); event.returnValue = '';
   }
 });
