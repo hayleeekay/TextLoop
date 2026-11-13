@@ -102,7 +102,13 @@ button.primary:hover { background: color-mix(in srgb, var(--primary) 90%, var(--
 button.quiet { background: transparent; border-color: transparent; color: var(--soft); }
 button.quiet:hover { background: var(--hover); }
 button:disabled { opacity: .6; cursor: default; }
-:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+:focus-visible { outline: none; }
+:is(button, input, select, textarea):focus-visible {
+  box-shadow: inset 0 -2px currentColor;
+}
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+}
 .view-heading {
   display: flex; justify-content: space-between; align-items: center; gap: .625rem;
   padding: .625rem 1rem; min-height: 4.25rem; margin-bottom: 1rem;
@@ -189,7 +195,6 @@ textarea { resize: vertical; }
 }
 .palette-option { border-color: transparent; background: transparent; }
 .palette-option[aria-pressed="true"] { background: var(--selection); font-weight: 650; }
-.palette-option:focus-visible { outline-offset: -2px; }
 .swatch {
   flex: none; width: 1.65rem; height: 1.05rem; border-radius: .25rem;
   border: 1px solid var(--line);
@@ -226,7 +231,6 @@ textarea { resize: vertical; }
 .bubble-more {
   flex: 0 0 2.75rem; width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.25rem;
 }
-.bubble-more:focus-visible { outline-offset: -2px; }
 .bubble-actions {
   padding: .2rem; border: 1px solid var(--line); border-radius: .7rem;
   background: var(--surface); color: var(--ink);
@@ -269,7 +273,6 @@ textarea { resize: vertical; }
   min-height: 2.75rem; max-height: clamp(2.75rem, 35dvh, 12rem); padding: .625rem .85rem;
   border-radius: 1rem; background: var(--paper); resize: none; overflow-y: auto;
 }
-#message:focus-visible { outline-offset: -2px; }
 #message::placeholder { color: var(--soft); opacity: 1; }
 :is(#save, #cancel) { width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
 #cancel { background: var(--card); border-color: var(--control); }

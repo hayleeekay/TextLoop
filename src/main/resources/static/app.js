@@ -25,7 +25,13 @@ let savingNumber = false;
 let numberRead = 0;
 const loaded = { upcoming: null, history: null };
 let toastTimer;
-const editMotion = matchMedia('(prefers-reduced-motion: no-preference)');
+const allowMotion = matchMedia('(prefers-reduced-motion: no-preference)');
+const tabContent = {
+  'messages-tab': 'thread',
+  home: 'upcoming',
+  'history-tab': 'history',
+  'settings-tab': 'settings-content'
+};
 
 function preference(key, fallback) {
   try { return localStorage.getItem(key) || fallback; }
@@ -133,10 +139,14 @@ function controls() {
 }
 
 function navigation(id) {
+  const previous = document.querySelector('[data-navigation][aria-current="page"]');
   document.querySelectorAll('[data-navigation]').forEach((tab) => {
     if (tab.id === id) tab.setAttribute('aria-current', 'page');
     else tab.removeAttribute('aria-current');
   });
+  if (previous && previous.id !== id && allowMotion.matches) {
+    $(tabContent[id]).animate([{ opacity: .72 }, { opacity: 1 }], { duration: 140, easing: 'ease-out' });
+  }
 }
 
 function scheduleValue() {
@@ -288,7 +298,7 @@ function composerOffset() {
 }
 
 function animateComposer() {
-  if (!editMotion.matches) return;
+  if (!allowMotion.matches) return;
   const offset = composerOffset();
   editSurface.animate(
     [{ opacity: offset === null ? 0 : 1, transform: `translateY(${offset ?? 10}px)` }, { opacity: 1, transform: 'none' }],
@@ -311,7 +321,7 @@ async function finishDialog() {
   editDialog.classList.add('closing');
   controls();
   let transition;
-  if (editMotion.matches) {
+  if (allowMotion.matches) {
     const { opacity, transform } = getComputedStyle(editSurface);
     const current = { opacity, transform };
     editSurface.getAnimations().forEach((animation) => animation.cancel());
