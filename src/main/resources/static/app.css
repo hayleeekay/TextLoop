@@ -6,14 +6,14 @@
   --paper: light-dark(oklch(.967 calc(var(--chroma) * .48) var(--hue)), oklch(.22 calc(var(--chroma) * .65) var(--hue)));
   --surface: light-dark(oklch(.989 calc(var(--chroma) * .25) var(--hue)), oklch(.27 calc(var(--chroma) * .75) var(--hue)));
   --ink: light-dark(oklch(.25 var(--chroma) var(--hue)), oklch(.96 var(--chroma) var(--hue)));
-  --soft: light-dark(oklch(.45 var(--chroma) var(--hue)), oklch(.79 var(--chroma) var(--hue)));
+  --soft: light-dark(oklch(.42 var(--chroma) var(--hue)), oklch(.82 var(--chroma) var(--hue)));
   --line: light-dark(oklch(.86 var(--chroma) var(--hue)), oklch(.42 var(--chroma) var(--hue)));
   --control: light-dark(oklch(.59 var(--chroma) var(--hue)), oklch(.67 var(--chroma) var(--hue)));
   --primary: light-dark(oklch(.40 calc(var(--chroma) * 2.5) var(--hue)), oklch(.80 calc(var(--chroma) * 1.7) var(--hue)));
   --on-primary: light-dark(oklch(.99 0 0), oklch(.23 var(--chroma) var(--hue)));
-  --tint: light-dark(oklch(.931 calc(var(--chroma) * 1.85) var(--hue)), oklch(.34 calc(var(--chroma) * 1.5) var(--hue)));
+  --tint: light-dark(oklch(.931 calc(var(--chroma) * 1.35) var(--hue)), oklch(.34 calc(var(--chroma) * 1.25) var(--hue)));
   --card: color-mix(in srgb, var(--surface) 68%, var(--tint));
-  --accent: light-dark(oklch(.879 calc(var(--chroma) * 2.8) var(--hue)), oklch(.395 calc(var(--chroma) * 2.5) var(--hue)));
+  --accent: light-dark(oklch(.879 calc(var(--chroma) * 1.75) var(--hue)), oklch(.395 calc(var(--chroma) * 1.75) var(--hue)));
   --sent-bubble: var(--tint);
   --scheduled-bubble: var(--card);
   --thread-background: var(--surface);
@@ -179,7 +179,7 @@ textarea { resize: vertical; }
 .swatch {
   flex: none; width: 1.65rem; height: 1.05rem; border-radius: .25rem;
   border: 1px solid var(--line);
-  background: light-dark(oklch(.77 calc(var(--chroma) * 3) var(--hue)), oklch(.54 calc(var(--chroma) * 2.8) var(--hue)));
+  background: light-dark(oklch(.77 calc(var(--chroma) * 2.2) var(--hue)), oklch(.54 calc(var(--chroma) * 2.2) var(--hue)));
 }
 [data-swatch="colorful"] .swatch { background: var(--clouds); }
 .palette-option[aria-pressed="true"]::after {
@@ -226,7 +226,7 @@ textarea { resize: vertical; }
   gap: .65rem;
   padding: 0 .65rem;
   border-radius: .75rem;
-  background: var(--card);
+  background: var(--tint);
 }
 .composer .time-inputs label {
   display: flex; flex-wrap: wrap; align-items: center; column-gap: .4rem;
@@ -265,6 +265,9 @@ textarea { resize: vertical; }
 #detail h2 { margin-bottom: .5rem; }
 #detail p + p { margin-top: .3rem; }
 [hidden] { display: none !important; }
+@media (max-width: 30rem) {
+  .composer .time-inputs label { flex-direction: column; align-items: start; }
+}
 @media (max-width: 38rem) {
   main { padding-inline: .7rem; }
   .header-inner { padding-inline: .5rem; gap: .15rem; }
