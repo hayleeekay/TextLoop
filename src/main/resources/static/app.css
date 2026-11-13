@@ -124,7 +124,6 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .schedule-group > h2 { margin-bottom: .4rem; color: var(--soft); }
 .schedule-group.next-up > h2 { color: var(--primary); }
 #upcoming .reminder-card { background: var(--card); }
-.next-up .reminder-card { border-inline-start: .2rem solid var(--primary); }
 #history .reminder-card {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .35rem .65rem;
   background: var(--tint);
@@ -142,8 +141,8 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 #history .reminder-card > .actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 #history .meta { margin: 0; }
 #history .meta span { overflow-wrap: anywhere; }
-#history .actions button { background: var(--surface); border-color: var(--control); color: var(--primary); }
-#history .actions button:hover { background: var(--hover); }
+.reminder-card .actions button { background: var(--surface); border-color: var(--control); }
+.reminder-card .actions button:hover { background: var(--hover); }
 .message { white-space: pre-wrap; overflow-wrap: anywhere; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .65rem; margin: .35rem 0 .65rem; color: var(--soft); font-size: .875rem; }
 .attention-text { color: var(--warn); margin-bottom: .6rem; }
@@ -215,12 +214,7 @@ textarea { resize: vertical; }
   display: grid; place-items: center; width: 2.85rem; aspect-ratio: 1; border-radius: 50%;
   background: var(--primary); color: var(--on-primary); font: 600 1.2rem/1 system-ui, sans-serif;
 }
-#conversation { position: relative; flex: 1; display: flex; flex-direction: column; }
-#conversation:has(.is-editing)::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  border-radius: 1.35rem 1.35rem 0 0;
-  background: light-dark(rgb(25 21 32 / .11), rgb(0 0 0 / .22));
-}
+#conversation { flex: 1; display: flex; flex-direction: column; }
 #thread {
   flex: 1; display: grid; align-content: end; gap: .6rem; width: min(100%, 42rem);
   margin-inline: auto; padding: 1rem;
@@ -229,11 +223,10 @@ textarea { resize: vertical; }
 .bubble-row { min-width: 0; }
 .bubble-content { display: flex; align-items: start; justify-content: end; gap: .25rem; }
 .bubble { max-width: 33rem; min-width: 0; padding: .45rem .7rem; background: var(--sent-bubble); border: 1px solid var(--line); border-radius: 1rem 1rem .25rem 1rem; }
-.bubble.scheduled { border: 1px dashed var(--control); background: var(--scheduled-bubble); }
+.bubble.scheduled { border-style: dashed; background: var(--scheduled-bubble); }
 .bubble-time { margin-bottom: .25rem; text-align: center; }
 .bubble-meta { margin-top: .2rem; text-align: right; }
-.bubble-row.is-editing { position: relative; z-index: 1; }
-.is-editing .bubble.scheduled { border: 1px solid var(--primary); }
+.is-editing { visibility: hidden; }
 .bubble-more {
   flex: 0 0 2.75rem; padding: 0; border-radius: 50%; font-size: 1.25rem;
 }
@@ -251,39 +244,54 @@ textarea { resize: vertical; }
   position: sticky; bottom: 0; z-index: 1; border: 0; border-top: 1px solid var(--line);
   padding: .5rem 1rem .75rem; border-radius: 0 0 1.35rem 1.35rem; background: var(--surface);
 }
-.composer fieldset {
+#reminder-form fieldset {
   max-width: 40rem; margin-inline: auto;
 }
 .time-inputs { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: .5rem; }
 .time-inputs label { min-width: 0; margin: 0; font-size: .8125rem; }
 .time-inputs input { margin-top: .15rem; padding-inline: .35rem; font-size: 1rem; font-weight: 500; }
-.composer .time-inputs {
+#reminder-form .time-inputs {
   grid-template-columns: minmax(0, max-content) minmax(0, max-content);
   gap: .65rem;
   padding: 0 .65rem;
   border-radius: .75rem;
   background: var(--selection);
 }
-.composer .time-inputs label {
+#reminder-form .time-inputs label {
   display: flex; flex-wrap: wrap; align-items: center; column-gap: .4rem;
   color: var(--soft);
 }
-.composer .time-inputs input {
+#reminder-form .time-inputs input {
   width: auto; max-width: 100%; margin-top: 0; border: 0; background: transparent;
   padding: .25rem 0; color: var(--ink);
 }
-.composer .time-inputs input::-webkit-datetime-edit { padding: 0; }
-.composer .time-inputs input::-webkit-calendar-picker-indicator { order: -1; margin-inline: 0 .35rem; }
-.composer .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-top: .45rem; }
-.composer .message-input:has(#cancel:not([hidden])) { grid-template-columns: auto minmax(0, 1fr) auto; }
-.composer .message-input label, .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.composer textarea {
+#reminder-form .time-inputs input::-webkit-datetime-edit { padding: 0; }
+#reminder-form .time-inputs input::-webkit-calendar-picker-indicator { order: -1; margin-inline: 0 .35rem; }
+.message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-top: .45rem; }
+.message-input:has(#cancel:not([hidden])) { grid-template-columns: auto minmax(0, 1fr) auto; }
+.message-input label, .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+#message {
   min-height: 2.75rem; max-height: clamp(2.75rem, 35dvh, 12rem); padding: .625rem .85rem;
-  border: 0; border-radius: 1rem; background: var(--paper);
-  box-shadow: inset 0 0 0 1px var(--control); resize: none; overflow-y: auto;
+  border-radius: 1rem; background: var(--paper); resize: none; overflow-y: auto;
 }
-.composer textarea::placeholder { color: var(--soft); opacity: 1; }
-.composer :is(#save, #cancel) { min-width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
+#message:focus-visible { outline-offset: -2px; }
+#message::placeholder { color: var(--soft); opacity: 1; }
+:is(#save, #cancel) { width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
+#cancel { background: var(--card); border-color: var(--control); }
+#cancel:hover { background: var(--hover); }
+#edit-dialog {
+  width: min(32rem, calc(100% - 1.5rem)); max-width: none; max-height: calc(100dvh - 1.5rem);
+  padding: .75rem; border: 1px solid var(--line); border-radius: 1.25rem;
+  background: var(--surface); color: var(--ink); overscroll-behavior: contain;
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / .22);
+}
+#edit-dialog::backdrop { background: rgb(23 19 28 / .48); backdrop-filter: blur(4px); }
+#edit-dialog .panel { padding: 0; border: 0; }
+#edit-dialog .time-inputs { border: 1px dashed var(--control); }
+#edit-dialog #notice { margin-block: .75rem 0; }
+.bubble-flight {
+  position: fixed; z-index: 3; max-width: none; overflow: hidden; pointer-events: none;
+}
 #notice:empty, #form-feedback:empty { display: none; }
 #toast {
   position: fixed; z-index: 2; inset-block-start: 4.25rem; inset-inline-end: 1rem;
@@ -301,7 +309,7 @@ textarea { resize: vertical; }
 #detail p + p { margin-top: .3rem; }
 [hidden] { display: none !important; }
 @media (max-width: 30rem) {
-  .composer .time-inputs label { flex-direction: column; align-items: start; }
+  #reminder-form .time-inputs label { flex-direction: column; align-items: start; }
 }
 @media (max-width: 38rem) {
   main { padding-inline: .7rem; }

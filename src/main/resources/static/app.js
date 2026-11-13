@@ -3,6 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const form = $('reminder-form');
 const feedback = $('form-feedback');
+const editDialog = $('edit-dialog');
 const retryKey = 'textloop.pendingReuse';
 const themes = ['system', 'light', 'dark'];
 let mode = 'view';
@@ -193,12 +194,12 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('settings').hidden = true;
   $('editor').hidden = false;
   form.hidden = false;
+  if (nextMode !== 'edit') closeEditDialog();
   $('cancel').hidden = nextMode === 'create';
   $('cancel').setAttribute('aria-label', nextMode === 'edit' ? 'Cancel edit' : 'Cancel reuse');
   $('message-label').textContent = nextMode === 'edit' ? 'Edit message' : 'Message';
   updateThreadEditing();
   $('message').value = draft.text ?? reminder?.message ?? '';
-  resizeMessage();
   originalMessageDisplay = draft.originalMessageDisplay ?? $('message').value;
   const [date, time] = (nextMode === 'edit' ? reminder.scheduledAt.slice(0, 16)
     : nextMode === 'create' ? tomorrowMorning() : '').split('T');
@@ -207,6 +208,12 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('save').textContent = nextMode === 'edit' ? '✓' : '↑';
   $('save').setAttribute('aria-label', nextMode === 'edit' ? 'Save changes' : 'Schedule text');
   navigation('messages-tab');
+  if (nextMode === 'edit' && !editDialog.open) {
+    editDialog.append(form, $('notice'), feedback, $('detail'));
+    $('message').setAttribute('autofocus', '');
+    editDialog.showModal();
+  }
+  resizeMessage();
   if (needsReview) reviewRequired('Review the saved reminder before saving again.');
   controls();
   if (focus) {
@@ -229,10 +236,10 @@ function openMessages() {
   showForm(composerDraft.mode, composerDraft.selected, { draft: composerDraft });
 }
 
-function finishComposer(focus = true) {
+function finishComposer() {
   composerDraft = draftBeforeAction ?? { mode: 'create' };
   draftBeforeAction = null;
-  showForm(composerDraft.mode, composerDraft.selected, { reviewed: true, draft: composerDraft, focus });
+  showForm(composerDraft.mode, composerDraft.selected, { reviewed: true, draft: composerDraft });
 }
 
 function threadRow(id) {
@@ -244,24 +251,63 @@ function updateThreadEditing() {
   if (mode === 'edit') threadRow(selected.id)?.classList.add('is-editing');
 }
 
-function animateFrom(element, origin) {
-  if (!element || !origin || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const offset = Math.max(-16, Math.min(16, origin.top - element.getBoundingClientRect().top));
-  element.animate([{ transform: `translateY(${offset}px)` }, { transform: 'none' }],
-    { duration: 160, easing: 'ease-out' });
+function closeEditDialog() {
+  if (!editDialog.open) return;
+  editDialog.close();
+  $('message').removeAttribute('autofocus');
+  $('editor').append(form);
+  $('toast').before($('notice'));
+  $('editor').after(feedback, $('detail'));
 }
 
-function returnToEditedMessage(id, origin) {
-  const row = threadRow(id);
-  (row?.querySelector('.bubble-more') ?? $('conversation-title')).focus();
-  animateFrom(row?.querySelector('.bubble'), origin);
+function visibleBounds(element) {
+  const rect = element?.getBoundingClientRect();
+  if (rect?.width && rect.bottom > 0 && rect.top < innerHeight) return rect;
+  return null;
+}
+
+function animateBubble(text, from, to, destination, entering) {
+  if (!from || !to || !destination?.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const parent = entering ? editDialog : $('editor');
+  const bubble = node('div', text, 'message bubble scheduled bubble-flight');
+  bubble.setAttribute('aria-hidden', 'true');
+  Object.assign(bubble.style, {
+    left: from.left + 'px', top: from.top + 'px', width: from.width + 'px', height: from.height + 'px'
+  });
+  parent.append(bubble);
+  const options = { duration: 220, easing: 'cubic-bezier(.2,.75,.3,1)' };
+  const animation = bubble.animate([
+    { transform: 'none', opacity: 1 },
+    { opacity: 1, offset: .6 },
+    {
+      transform: `translate(${to.left - from.left}px, ${to.top - from.top}px)`,
+      width: to.width + 'px', height: to.height + 'px', opacity: 0
+    }
+  ], options);
+  destination.animate([{ opacity: 0 }, { opacity: 0, offset: .6 }, { opacity: 1 }], options);
+  return animation.finished.catch(() => {}).finally(() => bubble.remove());
+}
+
+function focusEditedMessage(id) {
+  const trigger = threadRow(id)?.querySelector('.bubble-more');
+  (visibleBounds(trigger) ? trigger : $('conversation-title')).focus();
+}
+
+function animateEditReturn(id, text, origin) {
+  const bubble = threadRow(id)?.querySelector('.bubble');
+  return animateBubble(text, origin, visibleBounds(bubble), bubble, false);
 }
 
 function cancelComposer() {
+  if (saving) return;
   const id = mode === 'edit' ? selected.id : null;
-  const origin = $('message').getBoundingClientRect();
-  finishComposer(id === null);
-  if (id !== null) returnToEditedMessage(id, origin);
+  const origin = visibleBounds($('message'));
+  const text = selected?.message;
+  finishComposer();
+  if (id !== null) {
+    focusEditedMessage(id);
+    void animateEditReturn(id, text, origin);
+  }
 }
 
 function showBrowse(name = activeView, saved = false) {
@@ -342,10 +388,9 @@ async function openAction(nextMode, id) {
       rememberComposer();
       if (composerDraft.mode === 'create') draftBeforeAction = composerDraft;
       else if (composerDraft.dirty && !window.confirm('Discard the unfinished changes in Messages?')) return;
-      const origin = nextMode === 'edit' && !$('editor').hidden
-        ? threadRow(id)?.querySelector('.bubble').getBoundingClientRect() : null;
+      const origin = nextMode === 'edit' ? visibleBounds(threadRow(id)?.querySelector('.bubble')) : null;
       showForm(nextMode, reminder, { reviewed: true });
-      animateFrom($('message'), origin);
+      void animateBubble(reminder.message, origin, visibleBounds($('message')), $('message'), true);
       rememberComposer();
     }
   } catch {
@@ -363,7 +408,7 @@ async function reviewCurrentReminder() {
     const reminder = await request('/' + id);
     if (read !== detailRead) return;
     renderDetail(reminder);
-    notice(keepDraft ? 'Saved details are shown below your draft.' : 'Current saved details are shown below.');
+    notice(keepDraft ? '' : 'Current saved details are shown below.');
     $('detail').focus();
   } catch (failure) {
     if (read === detailRead) notice(failure.status === 404 ? 'This reminder is no longer available.' : 'Could not load the saved reminder. Try Review current reminder again.');
@@ -684,8 +729,9 @@ async function mutate(kind, id, body) {
   controls();
   notice('');
   toast('Saving…');
+  let saved;
   try {
-    await request(kind === 'create' ? '' : '/' + id + (kind === 'edit' ? '' : kind === 'reuse' ? '/remind-again' : '/withdraw'),
+    saved = await request(kind === 'create' ? '' : '/' + id + (kind === 'edit' ? '' : kind === 'reuse' ? '/remind-again' : '/withdraw'),
       kind === 'edit' ? 'PUT' : 'POST', body);
   } catch (failure) {
     toast('');
@@ -699,7 +745,7 @@ async function mutate(kind, id, body) {
   }
   if (kind === 'reuse') clearRetry();
   dirty = false; needsReview = false;
-  const editOrigin = kind === 'edit' ? $('message').getBoundingClientRect() : null;
+  const editOrigin = kind === 'edit' ? visibleBounds($('message')) : null;
   if (kind === 'create' || kind === 'edit' || (kind === 'reuse' && composerDraft.mode === 'reuse' && composerDraft.selected?.id === id)) {
     finishComposer();
   } else if (kind === 'reuse') {
@@ -709,9 +755,17 @@ async function mutate(kind, id, body) {
   }
   const savedText = kind === 'withdraw' ? 'Reminder withdrawn.' : kind === 'edit' ? 'Changes saved.' : 'Reminder scheduled.';
   toast(savedText, 4000);
+  if (kind === 'edit' && loaded.upcoming) {
+    loaded.upcoming = loaded.upcoming.map((reminder) => reminder.id === id ? { ...reminder, ...saved } : reminder);
+    renderThread();
+    controls();
+  }
+  if (editOrigin) {
+    await animateEditReturn(id, saved.message, editOrigin);
+  }
   await refreshLists();
-  if (editOrigin && mode === 'create' && document.activeElement === $('conversation-title')) {
-    returnToEditedMessage(id, editOrigin);
+  if (kind === 'edit' && mode === 'create' && document.activeElement === $('conversation-title')) {
+    focusEditedMessage(id);
   }
 }
 
@@ -755,6 +809,10 @@ for (const [id, name] of [['home', 'upcoming'], ['history-tab', 'history']]) {
   $(id).addEventListener('click', () => { if (showBrowse(name)) refreshLists(); });
 }
 $('cancel').addEventListener('click', cancelComposer);
+editDialog.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  cancelComposer();
+});
 
 const numberPath = '/api/settings/reminder-number';
 async function loadReminderNumber() {
