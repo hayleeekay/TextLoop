@@ -240,7 +240,6 @@ function threadRow(id) {
 }
 
 function updateThreadEditing() {
-  $('editor').classList.toggle('editing', mode === 'edit');
   $('thread').querySelector('.is-editing')?.classList.remove('is-editing');
   if (mode === 'edit') threadRow(selected.id)?.classList.add('is-editing');
 }

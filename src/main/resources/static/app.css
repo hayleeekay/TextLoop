@@ -216,7 +216,7 @@ textarea { resize: vertical; }
   background: var(--primary); color: var(--on-primary); font: 600 1.2rem/1 system-ui, sans-serif;
 }
 #conversation { position: relative; flex: 1; display: flex; flex-direction: column; }
-.editing #conversation::after {
+#conversation:has(.is-editing)::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   border-radius: 1.35rem 1.35rem 0 0;
   background: light-dark(rgb(25 21 32 / .11), rgb(0 0 0 / .22));
