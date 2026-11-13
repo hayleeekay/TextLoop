@@ -134,8 +134,36 @@ function showTimeFields(open) {
 }
 
 function updateTimePreview() {
-  const value = $('scheduled-at').value;
-  $('time-preview').textContent = value ? displayTime(value) : 'Choose send time';
+  const value = scheduleValue();
+  let label = value ? displayTime(value) : 'Set a new time';
+  if (value) {
+    const day = value.slice(0, 10);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (day === deviceTime(tomorrow).slice(0, 10)) {
+      const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+      label = 'Tomorrow at ' + clock.format(new Date(value + 'Z'));
+    }
+  }
+  $('time-preview').textContent = label;
+  $('time-toggle').setAttribute('aria-label', 'Send later: ' + label);
+}
+
+function scheduleValue() {
+  const date = $('send-date').value;
+  const time = $('send-time').value;
+  return date && time ? date + 'T' + time : '';
+}
+
+function deviceTime(date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function tomorrowMorning() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  return deviceTime(date);
 }
 
 function resizeMessage() {
@@ -151,7 +179,7 @@ function rememberComposer() {
   if ($('editor').hidden || !isComposer()) return;
   composerDraft = {
     mode, selected, originalMessageDisplay, dirty, needsReview,
-    text: $('message').value, time: $('scheduled-at').value, timeOpen: !$('time-fields').hidden
+    text: $('message').value, date: $('send-date').value, time: $('send-time').value, timeOpen: !$('time-fields').hidden
   };
 }
 
@@ -188,7 +216,6 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   }
   $('conversation').hidden = !isComposer();
   $('time-toggle').hidden = !isComposer();
-  $('time-presets').hidden = !isComposer();
   $('cancel').hidden = nextMode === 'create';
   $('draft-recipient').hidden = nextMode !== 'reuse' || reminder.phoneNumber === recipient;
   $('draft-recipient').textContent = nextMode === 'reuse' ? 'Uses the original number: ' + reminder.phoneNumber : '';
@@ -196,10 +223,13 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('message').value = draft.text ?? reminder?.message ?? '';
   resizeMessage();
   originalMessageDisplay = draft.originalMessageDisplay ?? $('message').value;
-  $('scheduled-at').value = draft.time ?? (nextMode === 'edit' ? reminder.scheduledAt.slice(0, 16) : '');
+  const [date, time] = (nextMode === 'edit' ? reminder.scheduledAt.slice(0, 16)
+    : nextMode === 'create' ? tomorrowMorning() : '').split('T');
+  $('send-date').value = draft.date ?? date;
+  $('send-time').value = draft.time ?? time ?? '';
   $('time-help').textContent = nextMode === 'edit'
     ? 'Current time: ' + localTime(reminder.scheduledAt) + '. Leave the time unchanged to keep it exactly, or choose a new future time.'
-    : 'Use the server’s timezone. Presets use this device’s clock.';
+    : 'Uses the server’s timezone.';
   showTimeFields(!isComposer() || (draft.timeOpen ?? nextMode === 'reuse'));
   updateTimePreview();
   $('save').textContent = isComposer() ? '↑' : 'Save changes';
@@ -552,7 +582,10 @@ function mutationError(kind, failure) {
       ? 'Choose a time that is still in the future.'
       : failure.status === 404 ? 'This reminder is no longer available.'
       : 'Could not save. Check the required message, phone number, and date/time.'));
-    if (failure.code === 'INVALID_SCHEDULE' && !form.hidden) setTimeout(() => $('scheduled-at').focus(), 0);
+    if (failure.code === 'INVALID_SCHEDULE' && !form.hidden) {
+      showTimeFields(true);
+      setTimeout(() => $('send-date').focus(), 0);
+    }
   }
 }
 
@@ -680,12 +713,12 @@ form.addEventListener('input', (event) => {
   if (event.target === $('message')) resizeMessage();
 });
 form.addEventListener('invalid', (event) => {
-  if (event.target === $('scheduled-at')) showTimeFields(true);
+  if (event.target === $('send-date') || event.target === $('send-time')) showTimeFields(true);
 }, true);
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (saving || needsReview || uncertainCreate || !form.reportValidity()) return;
-  const time = $('scheduled-at').value;
+  const time = scheduleValue();
   if (mode === 'reuse') {
     if (pendingReuse || retryStorageBlocked) return;
     let operationId;
@@ -722,21 +755,6 @@ for (const id of ['back', 'cancel']) $(id).addEventListener('click', () => {
   else if (showBrowse()) refreshLists();
 });
 $('time-toggle').addEventListener('click', () => showTimeFields($('time-fields').hidden));
-document.querySelectorAll('[data-preset]').forEach((button) => {
-  button.addEventListener('click', () => {
-    const time = new Date();
-    if (button.dataset.preset === 'hour') time.setTime(time.getTime() + 60 * 60 * 1000);
-    else {
-      time.setDate(time.getDate() + 1);
-      time.setHours(9, 0, 0, 0);
-    }
-    const local = new Date(time.getTime() - time.getTimezoneOffset() * 60 * 1000);
-    $('scheduled-at').value = local.toISOString().slice(0, 16);
-    form.dispatchEvent(new Event('input'));
-    showTimeFields(false);
-    $('time-toggle').focus();
-  });
-});
 $('recipient-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const value = $('phone').value.trim();
@@ -754,6 +772,14 @@ document.documentElement.dataset.theme = $('theme').value;
 $('theme').addEventListener('change', () => {
   document.documentElement.dataset.theme = $('theme').value;
   setPreference('textloop.theme', $('theme').value);
+});
+const palette = $('palette');
+palette.value = preference('textloop.palette', 'purple');
+if (!palette.value) palette.value = 'purple';
+document.documentElement.dataset.palette = palette.value;
+palette.addEventListener('change', () => {
+  document.documentElement.dataset.palette = palette.value;
+  setPreference('textloop.palette', palette.value);
 });
 window.addEventListener('resize', resizeMessage);
 document.addEventListener('visibilitychange', refreshInBackground);
