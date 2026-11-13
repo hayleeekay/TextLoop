@@ -4,7 +4,6 @@ const $ = (id) => document.getElementById(id);
 const form = $('reminder-form');
 const feedback = $('form-feedback');
 const retryKey = 'textloop.pendingReuse';
-const demoNumber = '+12035550100';
 const themes = ['system', 'light', 'dark'];
 let mode = 'view';
 let activeView = 'upcoming';
@@ -20,9 +19,9 @@ const listReads = { upcoming: 0, history: 0 };
 let pendingReuse = null;
 let retryStorageBlocked = false;
 let composerDraft = { mode: 'create' };
-let draftBeforeReuse = null;
-let editFromMessages = false;
-let recipient = preference('textloop.recipient', demoNumber);
+let draftBeforeAction = null;
+let savingNumber = false;
+let numberRead = 0;
 const loaded = { upcoming: null, history: null };
 let toastTimer;
 
@@ -76,6 +75,7 @@ function deliveryText(reminder) {
       : 'Waiting to retry, no earlier than ' + localTime(reminder.nextAttemptAt) + '.';
     case 'RETRY_EXHAUSTED': return reminder.withdrawnAt ? 'Sending attempts stopped. You can choose Reuse.'
       : 'Sending attempts stopped. Delivery review is needed before another attempt.';
+    case 'REMINDER_NUMBER_CHANGED': return 'Retries stopped when your reminder number changed.';
     case 'PERMANENT_REJECTION': return 'The sender rejected this alert. You can choose Reuse.';
     case 'DELIVERY_UNCERTAIN': return 'Sending could not be confirmed. Delivery review is needed before scheduling again.';
     case 'LEGACY_SENT': return 'Previously marked sent. Acceptance evidence is unavailable.';
@@ -87,10 +87,16 @@ function deliveryText(reminder) {
 
 // Only fixed error codes are displayed through our own copy, never response text.
 async function request(path, method = 'GET', body) {
+  const data = await requestJson('/api/reminders' + path, method, body);
+  if (method !== 'GET' && !isReminder(data)) throw { status: 0 };
+  return data;
+}
+
+async function requestJson(path, method = 'GET', body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch('/api/reminders' + path, {
+    const response = await fetch(path, {
       method, cache: 'no-store', signal: controller.signal,
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body)
@@ -98,14 +104,14 @@ async function request(path, method = 'GET', body) {
     let data;
     try { data = await response.json(); } catch { /* A lost save response is ambiguous too. */ }
     if (!response.ok) throw { status: response.status, code: data?.code };
-    if (!data || typeof data !== 'object' || (method !== 'GET' && !isReminder(data))) throw { status: 0 };
+    if (!data || typeof data !== 'object') throw { status: 0 };
     return data;
   } finally { clearTimeout(timeout); }
 }
 
 function isReminder(value) {
   return value && Number.isSafeInteger(value.id) && value.id > 0
-    && typeof value.message === 'string' && typeof value.phoneNumber === 'string'
+    && typeof value.message === 'string'
     && typeof value.scheduledAt === 'string' && Number.isSafeInteger(value.version);
 }
 
@@ -113,13 +119,10 @@ function controls() {
   $('fields').disabled = saving || uncertainCreate || (mode === 'reuse' && pendingReuse !== null);
   $('save').disabled = saving || needsReview || (mode === 'reuse' && (pendingReuse !== null || retryStorageBlocked));
   $('new-reminder').disabled = saving || uncertainCreate;
-  $('back').disabled = saving;
-  document.querySelectorAll('[data-navigation]').forEach((item) => { item.disabled = saving; });
+  document.querySelectorAll('[data-navigation]').forEach((item) => { item.disabled = saving || savingNumber; });
   document.querySelectorAll('[data-selection]').forEach((item) => { item.disabled = saving || uncertainCreate; });
-  $('saved-retry').querySelectorAll('button').forEach((item) => { item.disabled = saving; });
+  $('saved-retry').querySelectorAll('button').forEach((item) => { item.disabled = saving || savingNumber; });
 }
-
-function isComposer() { return mode === 'create' || mode === 'reuse'; }
 
 function navigation(id) {
   document.querySelectorAll('[data-navigation]').forEach((tab) => {
@@ -148,14 +151,14 @@ function tomorrowMorning() {
 function resizeMessage() {
   const field = $('message');
   field.style.height = '';
-  if (isComposer() && field.clientWidth) {
+  if (field.clientWidth) {
     field.style.height = '0px';
     field.style.height = field.scrollHeight + 'px';
   }
 }
 
 function rememberComposer() {
-  if ($('editor').hidden || !isComposer()) return;
+  if ($('editor').hidden) return;
   composerDraft = {
     mode, selected, originalMessageDisplay, dirty, needsReview,
     text: $('message').value, date: $('send-date').value, time: $('send-time').value
@@ -163,12 +166,12 @@ function rememberComposer() {
 }
 
 function canLeave() {
-  if (saving) return false;
+  if (saving || savingNumber) return false;
   if (uncertainCreate) {
     notice('This save might have succeeded. Check Schedule and History, then choose Start again after checking.');
     return false;
   }
-  return isComposer() || !dirty || window.confirm('Discard the unsaved changes in this form?');
+  return true;
 }
 
 function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, focus = true } = {}) {
@@ -185,19 +188,9 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('settings').hidden = true;
   $('editor').hidden = false;
   form.hidden = false;
-  $('editor').classList.toggle('composer', isComposer());
-  $('editor').setAttribute('aria-labelledby', isComposer() ? 'conversation-title' : 'editor-title');
-  $('back').hidden = isComposer();
-  $('edit-heading').hidden = isComposer();
-  if (nextMode === 'edit') {
-    $('editor-title').textContent = 'Edit reminder';
-    $('editor-help').textContent = 'Make a change before this alert sends.';
-  }
-  $('conversation').hidden = !isComposer();
-  $('cancel').hidden = nextMode === 'create';
-  $('draft-recipient').hidden = nextMode !== 'reuse' || reminder.phoneNumber === recipient;
-  $('draft-recipient').textContent = nextMode === 'reuse' ? 'Uses the original number: ' + reminder.phoneNumber : '';
   $('draft-actions').hidden = nextMode === 'create';
+  $('draft-label').textContent = nextMode === 'edit' ? 'Editing scheduled reminder' : '';
+  $('draft-label').hidden = nextMode !== 'edit';
   $('message').value = draft.text ?? reminder?.message ?? '';
   resizeMessage();
   originalMessageDisplay = draft.originalMessageDisplay ?? $('message').value;
@@ -205,19 +198,19 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
     : nextMode === 'create' ? tomorrowMorning() : '').split('T');
   $('send-date').value = draft.date ?? date;
   $('send-time').value = draft.time ?? time ?? '';
-  $('save').textContent = isComposer() ? '↑' : 'Save changes';
-  $('save').setAttribute('aria-label', isComposer() ? 'Schedule text' : 'Save changes');
-  if (isComposer()) navigation('messages-tab');
-  if (needsReview) reviewRequired('Review the saved reminder before scheduling again.');
+  $('save').textContent = nextMode === 'edit' ? '✓' : '↑';
+  $('save').setAttribute('aria-label', nextMode === 'edit' ? 'Save changes' : 'Schedule text');
+  navigation('messages-tab');
+  if (needsReview) reviewRequired('Review the saved reminder before saving again.');
   controls();
   if (focus) {
-    const target = nextMode === 'reuse' ? 'send-date' : nextMode === 'create' ? 'conversation-title' : 'editor-title';
+    const target = nextMode === 'reuse' ? 'send-date' : nextMode === 'create' ? 'conversation-title' : 'message';
     $(target).focus();
   }
 }
 
 function openMessages() {
-  if (saving) return;
+  if (saving || savingNumber) return;
   if (uncertainCreate) {
     $('settings').hidden = true;
     $('browse').hidden = true;
@@ -231,13 +224,13 @@ function openMessages() {
 }
 
 function finishComposer() {
-  composerDraft = draftBeforeReuse ?? { mode: 'create' };
-  draftBeforeReuse = null;
+  composerDraft = draftBeforeAction ?? { mode: 'create' };
+  draftBeforeAction = null;
   showForm(composerDraft.mode, composerDraft.selected, { reviewed: true, draft: composerDraft });
 }
 
 function showBrowse(name = activeView, saved = false) {
-  if (saving || (!uncertainCreate && !saved && !canLeave())) return false;
+  if (saving || savingNumber || (!uncertainCreate && !saved && !canLeave())) return false;
   if (!uncertainCreate && !saved) rememberComposer();
   ++detailRead;
   activeView = name;
@@ -270,14 +263,13 @@ function openSettings() {
   $('detail').hidden = true;
   feedback.replaceChildren();
   notice('');
-  $('phone').value = recipient;
   $('settings').hidden = false;
   navigation('settings-tab');
+  void loadReminderNumber();
 }
 
 function summary(reminder, container) {
   container.append(node('p', reminder.message, 'message'),
-    node('p', 'To: ' + reminder.phoneNumber),
     node('p', 'Scheduled: ' + localTime(reminder.scheduledAt)),
     node('p', deliveryText(reminder), 'hint'));
   if (reminder.withdrawnAt) container.append(node('p', 'Withdrawn: ' + localTime(reminder.withdrawnAt), 'hint'));
@@ -311,15 +303,12 @@ async function openAction(nextMode, id) {
       if (!window.confirm('Withdraw this reminder? Further attempts will stop, but an attempt already in progress may still send.')) return;
       selected = reminder;
       await mutate('withdraw', reminder.id, { expectedVersion: reminder.version });
-    } else if (nextMode === 'reuse') {
-      rememberComposer();
-      if (composerDraft.mode === 'create') draftBeforeReuse = composerDraft;
-      showForm('reuse', reminder, { reviewed: true });
-      rememberComposer();
     } else {
-      editFromMessages = !$('editor').hidden && isComposer();
       rememberComposer();
+      if (composerDraft.mode === 'create') draftBeforeAction = composerDraft;
+      else if (composerDraft.dirty && !window.confirm('Discard the unfinished changes in Messages?')) return;
       showForm(nextMode, reminder, { reviewed: true });
+      rememberComposer();
     }
   } catch {
     if (read === detailRead) notice('Could not refresh this reminder. Try again before making a change.');
@@ -335,21 +324,9 @@ async function reviewCurrentReminder() {
   try {
     const reminder = await request('/' + id);
     if (read !== detailRead) return;
-    if (!keepDraft) {
-      mode = 'review'; form.hidden = true;
-      $('browse').hidden = true; $('editor').hidden = false;
-      $('editor').classList.remove('composer');
-      $('editor').setAttribute('aria-labelledby', 'editor-title');
-      $('back').hidden = false;
-      $('edit-heading').hidden = false;
-      $('conversation').hidden = true;
-      $('editor-title').textContent = 'Review reminder';
-      $('editor-help').textContent = 'Check the saved details before starting another change.';
-    }
     renderDetail(reminder);
-    notice(keepDraft ? 'Saved details are shown below your draft. Review them before starting again.' : 'Current saved details are shown below.');
-    if (keepDraft) $('detail').scrollIntoView({ block: 'nearest' });
-    else $('editor-title').focus();
+    notice(keepDraft ? 'Saved details are shown below your draft.' : 'Current saved details are shown below.');
+    $('detail').focus();
   } catch (failure) {
     if (read === detailRead) notice(failure.status === 404 ? 'This reminder is no longer available.' : 'Could not load the saved reminder. Try Review current reminder again.');
   }
@@ -360,11 +337,11 @@ function renderCard(reminder, name) {
   if (reminder.withdrawnAt) row.classList.add('withdrawn');
   row.append(node('h2', reminder.message, 'message'));
   const labels = { ACCEPTED: 'Sent (simulated)', RETRY_WAITING: 'Retry scheduled',
-    RETRY_EXHAUSTED: 'Sending stopped', PERMANENT_REJECTION: 'Not sent',
+    RETRY_EXHAUSTED: 'Sending stopped', PERMANENT_REJECTION: 'Not sent', REMINDER_NUMBER_CHANGED: 'Sending stopped',
     DELIVERY_UNCERTAIN: 'Needs review', LEGACY_SENT: 'Previously sent',
     UNTRACKED: 'Needs review', INCONSISTENT_DELIVERY: 'Needs review' };
   const attention = ['RETRY_WAITING', 'RETRY_EXHAUSTED', 'PERMANENT_REJECTION',
-    'DELIVERY_UNCERTAIN', 'UNTRACKED', 'INCONSISTENT_DELIVERY'].includes(reminder.feedback);
+    'REMINDER_NUMBER_CHANGED', 'DELIVERY_UNCERTAIN', 'UNTRACKED', 'INCONSISTENT_DELIVERY'].includes(reminder.feedback);
   const meta = node('div', undefined, 'meta');
   const status = reminder.withdrawnAt ? 'Withdrawn'
     : reminder.feedback === 'WAITING' ? '' : labels[reminder.feedback] ?? 'Needs review';
@@ -373,11 +350,6 @@ function renderCard(reminder, name) {
   meta.append(node('span', status ? status + ' · ' + dateLabel : dateLabel));
   if (reminder.withdrawnAt && reminder.feedback === 'ACCEPTED') {
     meta.append(node('span', 'Simulated send accepted'));
-  }
-  if (name === 'history') {
-    meta.append(node('span', 'Recipient: ' + reminder.phoneNumber));
-  } else if (reminder.phoneNumber !== recipient) {
-    meta.append(node('span', 'To ' + reminder.phoneNumber));
   }
   row.append(meta);
   if (attention) row.append(node('p', deliveryText(reminder), 'attention-text'));
@@ -565,7 +537,7 @@ function mutationError(kind, failure) {
     feedback.replaceChildren(node('p', failure.code === 'INVALID_SCHEDULE'
       ? 'Choose a time that is still in the future.'
       : failure.status === 404 ? 'This reminder is no longer available.'
-      : 'Could not save. Check the required message, phone number, and date/time.'));
+      : 'Could not save. Check the message and date/time.'));
     if (failure.code === 'INVALID_SCHEDULE' && !form.hidden) {
       setTimeout(() => $('send-date').focus(), 0);
     }
@@ -607,7 +579,7 @@ function storeRetry(value) {
   } catch {
     retryStorageBlocked = true;
     renderRetry();
-    feedback.replaceChildren(node('p', 'This browser could not keep track of the save, so nothing was submitted. Other reminder forms and browsing are still available.'));
+    feedback.replaceChildren(node('p', 'This browser could not keep track of the save, so nothing was submitted.'));
     controls();
     return false;
   }
@@ -677,9 +649,9 @@ async function mutate(kind, id, body) {
   }
   if (kind === 'reuse') clearRetry();
   dirty = false; needsReview = false;
-  if (kind === 'create' || (kind === 'reuse' && composerDraft.selected?.id === id)) {
+  if (kind === 'create' || kind === 'edit' || (kind === 'reuse' && composerDraft.mode === 'reuse' && composerDraft.selected?.id === id)) {
     finishComposer();
-  } else if (kind === 'reuse' || (kind === 'edit' && editFromMessages)) {
+  } else if (kind === 'reuse') {
     showForm(composerDraft.mode, composerDraft.selected, { reviewed: true, draft: composerDraft });
   } else {
     showBrowse(kind === 'withdraw' ? 'history' : 'upcoming', true);
@@ -718,7 +690,7 @@ form.addEventListener('submit', async (event) => {
     const message = $('message').value === originalMessageDisplay ? selected.message : $('message').value;
     await mutate('edit', selected.id, { message, scheduledAt, expectedVersion: selected.version });
   } else if (mode === 'create') {
-    await mutate('create', null, { message: $('message').value, phoneNumber: recipient, scheduledAt: newSchedule(time) });
+    await mutate('create', null, { message: $('message').value, scheduledAt: newSchedule(time) });
   }
 });
 
@@ -728,21 +700,56 @@ $('settings-tab').addEventListener('click', openSettings);
 for (const [id, name] of [['home', 'upcoming'], ['history-tab', 'history']]) {
   $(id).addEventListener('click', () => { if (showBrowse(name)) refreshLists(); });
 }
-for (const id of ['back', 'cancel']) $(id).addEventListener('click', () => {
-  if (mode === 'reuse') finishComposer();
-  else if (mode === 'edit' && editFromMessages) openMessages();
-  else if (showBrowse()) refreshLists();
-});
-$('recipient-form').addEventListener('submit', (event) => {
+$('cancel').addEventListener('click', finishComposer);
+
+const numberPath = '/api/settings/reminder-number';
+async function loadReminderNumber() {
+  const read = ++numberRead;
+  const input = $('phone');
+  const saveNumber = $('save-number');
+  input.value = '';
+  input.disabled = saveNumber.disabled = true;
+  try {
+    const { phoneNumber } = await requestJson(numberPath);
+    if (read !== numberRead) return;
+    if (typeof phoneNumber !== 'string') throw {};
+    input.value = input.defaultValue = phoneNumber;
+    input.disabled = saveNumber.disabled = false;
+  } catch {
+    if (read === numberRead && !$('settings').hidden) {
+      notice('Could not load your reminder number. Reopen Settings to try again.');
+    }
+  }
+}
+
+$('recipient-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const value = $('phone').value.trim();
-  if (!value || value.includes('\0')) {
-    notice('Enter a number for your reminders.');
-    $('phone').focus();
+  const input = $('phone');
+  const phoneNumber = input.value.trim().replace(/[ ().-]/g, '');
+  if (!/^\+[1-9][0-9]{1,14}$/.test(phoneNumber)) {
+    notice('Enter your phone number with a country code, starting with +.');
+    input.focus();
     return;
   }
-  recipient = value;
-  notice(setPreference('textloop.recipient', value) ? 'Number saved.' : 'Number set for this visit.');
+  if (!window.confirm('Change your reminder number to ' + phoneNumber
+    + '? Reminders that have not started sending will use this number. Retries to a different number will be skipped. A send already in progress may still finish.')) return;
+  savingNumber = true;
+  input.disabled = $('save-number').disabled = true;
+  controls();
+  try {
+    const saved = await requestJson(numberPath, 'PUT', { phoneNumber });
+    input.value = input.defaultValue = saved.phoneNumber;
+    notice('Reminder number updated.');
+    await refreshLists();
+  } catch {
+    await loadReminderNumber();
+    notice(input.disabled ? 'Could not confirm your reminder number. Reopen Settings to check.'
+      : 'Check the number shown in Settings before trying again.');
+  } finally {
+    savingNumber = false;
+    if (input.value) input.disabled = $('save-number').disabled = false;
+    controls();
+  }
 });
 $('theme').value = preference('textloop.theme', 'system');
 if (!themes.includes($('theme').value)) $('theme').value = 'system';
@@ -793,7 +800,7 @@ window.addEventListener('resize', resizeMessage);
 document.addEventListener('visibilitychange', refreshInBackground);
 setInterval(refreshInBackground, 60000);
 window.addEventListener('beforeunload', (event) => {
-  if (saving || uncertainCreate || dirty || composerDraft.dirty || draftBeforeReuse?.dirty) {
+  if (saving || savingNumber || uncertainCreate || dirty || composerDraft.dirty || draftBeforeAction?.dirty) {
     event.preventDefault(); event.returnValue = '';
   }
 });

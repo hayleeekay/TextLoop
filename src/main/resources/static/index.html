@@ -23,15 +23,8 @@
   <p id="notice" role="status" aria-live="polite"></p>
   <p id="toast" role="status"></p>
   <section id="saved-retry" hidden aria-label="Unconfirmed save"></section>
-  <section id="editor" hidden aria-labelledby="editor-title">
-    <button id="back" type="button" class="quiet back">Back to reminders</button>
-    <div class="heading" id="edit-heading">
-      <div>
-        <h1 id="editor-title" tabindex="-1">Edit reminder</h1>
-        <p id="editor-help" class="hint">Make a change before this alert sends.</p>
-      </div>
-    </div>
-    <div id="conversation" hidden>
+  <section id="editor" class="composer" hidden aria-labelledby="conversation-title">
+    <div id="conversation">
       <div class="contact">
         <span class="avatar" aria-hidden="true">M</span>
         <h1 id="conversation-title" tabindex="-1">Future me ✨</h1>
@@ -51,14 +44,14 @@
           <button id="save" type="submit" class="primary">Schedule text</button>
         </div>
         <div class="actions form-actions" id="draft-actions">
-          <p id="draft-recipient" class="hint" hidden></p>
+          <p id="draft-label" class="hint" hidden></p>
           <button id="cancel" type="button">Cancel</button>
         </div>
       </fieldset>
     </form>
   </section>
   <div id="form-feedback" role="status" aria-live="polite"></div>
-  <section id="detail" hidden aria-label="Current saved version"></section>
+  <section id="detail" hidden tabindex="-1" aria-label="Current saved version"></section>
   <section id="browse" hidden aria-labelledby="view-title">
     <div class="heading browse-heading">
       <h1 id="view-title" tabindex="-1">Reminders</h1>
@@ -122,10 +115,10 @@
     </div>
     <form id="recipient-form">
       <h2>Your number</h2>
-      <label for="phone">Default number for reminders</label>
-      <input id="phone" name="phone" type="tel" maxlength="255" required>
-      <p class="hint">Saved in this browser. Sending is simulated.</p>
-      <button type="submit" class="primary">Save number</button>
+      <label for="phone">Number for reminders</label>
+      <input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="+12035550100" maxlength="32" required>
+      <p class="hint">Use your own number with its country code. Sending is simulated.</p>
+      <button id="save-number" type="submit" class="primary" disabled>Save number</button>
     </form>
   </section>
   <noscript><p>Enable JavaScript to use TextLoop.</p></noscript>

@@ -180,9 +180,7 @@ class ReminderControllerTest {
     private static Stream<String> missingOrNullStrings() {
         return Stream.of(
                 "\"phoneNumber\":\"+12035550100\"",
-                "\"phoneNumber\":\"+12035550100\",\"message\":null",
-                "\"message\":\"Take a walk\"",
-                "\"message\":\"Take a walk\",\"phoneNumber\":null");
+                "\"phoneNumber\":\"+12035550100\",\"message\":null");
     }
 
     @ParameterizedTest

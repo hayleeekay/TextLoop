@@ -162,7 +162,6 @@ input, textarea, select {
 }
 textarea { resize: vertical; }
 .form-actions { margin-top: .75rem; }
-.back { margin-bottom: .7rem; }
 .settings { width: min(100%, 33rem); margin-inline: auto; }
 .settings > h2 { padding: .65rem .75rem; }
 .settings form { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: 1rem; }
@@ -280,7 +279,6 @@ textarea { resize: vertical; }
 .composer textarea::placeholder { color: var(--soft); opacity: 1; }
 .composer #save { min-width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
 .composer .form-actions { justify-content: end; margin-top: .3rem; }
-#editor:not(.composer) #save { margin-top: .5rem; }
 #notice:empty, #form-feedback:empty { display: none; }
 #toast {
   position: fixed; z-index: 2; inset-block-start: 4.25rem; inset-inline-end: 1rem;

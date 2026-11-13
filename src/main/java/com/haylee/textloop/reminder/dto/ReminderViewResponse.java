@@ -28,6 +28,7 @@ public record ReminderViewResponse(
         RETRY_WAITING,
         RETRY_EXHAUSTED,
         PERMANENT_REJECTION,
+        REMINDER_NUMBER_CHANGED,
         DELIVERY_UNCERTAIN,
         /** Recorded as SENT without a delivery record; acceptance evidence is unavailable. */
         LEGACY_SENT,

@@ -24,14 +24,14 @@ numbers are fictional, and response IDs are illustrative.
 
 `POST /api/reminders`
 
-Save a reminder with its message, phone number, and scheduled time. Sending happens
+Save a reminder with its message and scheduled time. Sending happens
 later through the scheduler.
 
 ### Request fields
 
-All fields are required and cannot be `null`. `message` and `phoneNumber` must be
-nonblank, meaning they contain something other than whitespace. Accepted strings
-are stored unchanged. Embedded NUL characters (`U+0000`) are rejected.
+`message` and `scheduledAt` are required. `message` and any supplied `phoneNumber`
+must contain something other than whitespace. Embedded NUL characters (`U+0000`)
+are rejected.
 
 String-length limits use UTF-16 code units, matching Java's `String.length()`.
 Most common letters count as one unit. Emojis like 😀 count as two units.
@@ -39,7 +39,7 @@ Most common letters count as one unit. Emojis like 😀 count as two units.
 | Field | JSON type | Constraints and behavior |
 | --- | --- | --- |
 | `message` | string | Maximum 1,000 UTF-16 code units. This is an input-size limit, not an SMS segment limit. |
-| `phoneNumber` | string | Maximum 255 UTF-16 code units. Phone-number format is not validated or normalized. |
+| `phoneNumber` | string | Optional legacy input. The server's saved reminder number takes precedence. With neither, the app uses the demo number. Maximum 255 UTF-16 code units. |
 | `scheduledAt` | string (date-time) | Local ISO format, such as `2030-01-15T14:30:00`, without a timezone or offset. Fractional seconds are truncated to microseconds. The stored value must be strictly after the server's full current local time when validated. Timezone suffixes and offsets are rejected; no caller-timezone conversion. |
 
 ### Example request
@@ -194,7 +194,7 @@ the current reminder and version before deciding whether another correction is n
 
 `POST /api/reminders/{id}/remind-again`
 
-Schedule one fresh reminder for the source's phone number, preserving the source
+Schedule one fresh reminder with the current reminder number, preserving the source
 and its delivery evidence. Saving sends no confirmation text. Browsing
 reminders or prefilling a form schedules nothing.
 
@@ -223,7 +223,8 @@ Timezone suffixes and offsets are rejected, as with creation and editing.
 | Active `READY` alert, including overdue alerts | No. Edit or withdraw it first. |
 | `UNKNOWN` | No. Use [delivery review](delivery-recovery.md). |
 | Withdrawn, confirmed `RETRYABLE_REJECTION`, including exhausted retries | Yes. Withdrawal prevents another attempt on the old delivery. |
-| Unwithdrawn `RETRYABLE_REJECTION`, including exhausted retries | No. Use delivery recovery; another attempt may remain or be granted. |
+| Confirmed `RETRYABLE_REJECTION` stopped by a number change | Yes. The old delivery stays stopped. |
+| Other unwithdrawn `RETRYABLE_REJECTION`, including exhausted retries | No. Use delivery recovery. |
 | Untracked `PENDING` or inconsistent delivery state | No. |
 
 Success returns `200 OK` with a new reminder in the usual response format. Its
@@ -252,10 +253,17 @@ The normal application's scheduler runs at a 60-second interval by default. It
 checks due `PENDING` reminders, but the reminder status alone does not authorize a
 send. A separate delivery record determines whether submission is permitted.
 
-Creating a reminder also saves its current delivery intent: a delivery ID and a
-snapshot of the phone number and full rendered message. Retries use that same ID
-and snapshot. New snapshots contain `TextLoop Reminder:` followed by the message,
+Creating a reminder saves a delivery ID and a snapshot of the rendered message.
+At first submission, the delivery records the current reminder number. Retries
+use the same ID and payload, and stop if that number differs from the current
+setting. A submission already in progress can finish. New snapshots contain
+`TextLoop Reminder:` followed by the message,
 without reply instructions. Historical snapshots keep their original text.
+
+`GET /api/settings/reminder-number` reads the local server's reminder number.
+`PUT /api/settings/reminder-number` saves it using JSON such as
+`{"phoneNumber":"+12035550100"}`. Use a plus sign and a country code. This setting
+is for the local, simulated app.
 
 For an eligible delivery, TextLoop:
 

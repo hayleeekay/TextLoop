@@ -15,6 +15,6 @@ public record CreateReminderRequest(
         @NotBlank @Pattern(regexp = ReminderLimits.NUL_FREE_TEXT)
         @Size(max = ReminderLimits.MESSAGE_MAX_LENGTH) String message,
         @NotNull @JsonFormat(lenient = OptBoolean.FALSE) LocalDateTime scheduledAt,
-        @NotBlank @Pattern(regexp = ReminderLimits.NUL_FREE_TEXT)
+        @Pattern(regexp = "(?=.*\\P{javaWhitespace})" + ReminderLimits.NUL_FREE_TEXT, flags = Pattern.Flag.DOTALL)
         @Size(max = ReminderLimits.PHONE_NUMBER_MAX_LENGTH) String phoneNumber) {
 }

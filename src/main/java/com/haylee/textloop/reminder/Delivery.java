@@ -3,6 +3,7 @@ package com.haylee.textloop.reminder;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -27,7 +28,7 @@ public class Delivery {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Reminder reminder;
 
-    @Column(nullable = false, updatable = false, length = ReminderLimits.PHONE_NUMBER_MAX_LENGTH)
+    @Column(nullable = false, length = ReminderLimits.PHONE_NUMBER_MAX_LENGTH)
     private String phoneNumber;
 
     // Includes the reminder wrapper, so the raw-input limit is not the storage limit.
@@ -47,6 +48,9 @@ public class Delivery {
     private LocalDateTime nextAttemptAt;
     @Column(nullable = false)
     private boolean extraAttemptPermitted;
+    @Column(nullable = false)
+    @ColumnDefault("false")
+    private boolean stoppedByNumberChange;
     @Column(length = 255)
     private String acceptanceReference;
     private UUID replacesDeliveryId;
@@ -76,6 +80,19 @@ public class Delivery {
 
     static String renderMessage(String raw) {
         return "TextLoop Reminder:\n" + raw;
+    }
+
+    void routeFirstAttemptTo(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
+    void stopForNumberChange(LocalDateTime now) {
+        stoppedByNumberChange = true;
+        updatedAt = now;
+    }
+
+    boolean isStoppedByNumberChange() {
+        return stoppedByNumberChange;
     }
 
     void beginAttempt(LocalDateTime now) {
