@@ -39,13 +39,10 @@
           <label>Time<input id="send-time" type="time" step="60" required></label>
         </div>
         <div class="message-input">
-          <label for="message">Message</label>
+          <button id="cancel" class="quiet" type="button" aria-label="Cancel edit" hidden>×</button>
+          <label for="message" id="message-label">Message</label>
           <textarea id="message" name="message" maxlength="1000" rows="2" placeholder="Message" required></textarea>
           <button id="save" type="submit" class="primary">Schedule text</button>
-        </div>
-        <div class="actions form-actions" id="draft-actions">
-          <p id="draft-label" class="hint" hidden></p>
-          <button id="cancel" type="button">Cancel</button>
         </div>
       </fieldset>
     </form>

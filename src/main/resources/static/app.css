@@ -58,7 +58,7 @@
   --chroma: 0;
   --paper: light-dark(#f7f3ed, #222529);
   --surface: light-dark(#fffaf4, #2b3034);
-  --primary: light-dark(#4b6758, #b5c9b9);
+  --primary: light-dark(#3e6269, #a8c9cf);
   --tint: light-dark(#eae4ed, #3e3747);
   --hover: linear-gradient(105deg, var(--mint), var(--lilac), var(--rose));
   --selection: var(--hover);
@@ -215,22 +215,27 @@ textarea { resize: vertical; }
   display: grid; place-items: center; width: 2.85rem; aspect-ratio: 1; border-radius: 50%;
   background: var(--primary); color: var(--on-primary); font: 600 1.2rem/1 system-ui, sans-serif;
 }
-#conversation { flex: 1; display: flex; flex-direction: column; }
+#conversation { position: relative; flex: 1; display: flex; flex-direction: column; }
+.editing #conversation::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  border-radius: 1.35rem 1.35rem 0 0;
+  background: light-dark(rgb(25 21 32 / .11), rgb(0 0 0 / .22));
+}
 #thread {
   flex: 1; display: grid; align-content: end; gap: .6rem; width: min(100%, 42rem);
   margin-inline: auto; padding: 1rem;
 }
 .thread-empty { justify-self: center; }
-.bubble-row { justify-self: end; max-width: min(92%, 33rem); min-width: 0; }
-.bubble-row:has(.bubble-more) {
-  display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); column-gap: .25rem; align-items: start;
-}
-.bubble-row:has(.bubble-more) > :is(.bubble, .bubble-meta) { grid-column: 2; }
-.bubble { padding: .45rem .7rem; background: var(--sent-bubble); border: 1px solid var(--line); border-radius: 1rem 1rem .25rem 1rem; }
+.bubble-row { min-width: 0; }
+.bubble-content { display: flex; align-items: start; justify-content: end; gap: .25rem; }
+.bubble { max-width: 33rem; min-width: 0; padding: .45rem .7rem; background: var(--sent-bubble); border: 1px solid var(--line); border-radius: 1rem 1rem .25rem 1rem; }
 .bubble.scheduled { border: 1px dashed var(--control); background: var(--scheduled-bubble); }
+.bubble-time { margin-bottom: .25rem; text-align: center; }
 .bubble-meta { margin-top: .2rem; text-align: right; }
+.bubble-row.is-editing { position: relative; z-index: 1; }
+.is-editing .bubble.scheduled { border: 1px solid var(--primary); }
 .bubble-more {
-  grid-area: 1 / 1; width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.25rem;
+  flex: 0 0 2.75rem; padding: 0; border-radius: 50%; font-size: 1.25rem;
 }
 .bubble-more:focus-visible { outline-offset: -2px; }
 .bubble-actions {
@@ -270,6 +275,7 @@ textarea { resize: vertical; }
 .composer .time-inputs input::-webkit-datetime-edit { padding: 0; }
 .composer .time-inputs input::-webkit-calendar-picker-indicator { order: -1; margin-inline: 0 .35rem; }
 .composer .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-top: .45rem; }
+.composer .message-input:has(#cancel:not([hidden])) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .composer .message-input label, .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .composer textarea {
   min-height: 2.75rem; max-height: clamp(2.75rem, 35dvh, 12rem); padding: .625rem .85rem;
@@ -277,8 +283,7 @@ textarea { resize: vertical; }
   box-shadow: inset 0 0 0 1px var(--control); resize: none; overflow-y: auto;
 }
 .composer textarea::placeholder { color: var(--soft); opacity: 1; }
-.composer #save { min-width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
-.composer .form-actions { justify-content: end; margin-top: .3rem; }
+.composer :is(#save, #cancel) { min-width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
 #notice:empty, #form-feedback:empty { display: none; }
 #toast {
   position: fixed; z-index: 2; inset-block-start: 4.25rem; inset-inline-end: 1rem;

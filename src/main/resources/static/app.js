@@ -58,12 +58,17 @@ function toast(text, duration = 0) {
 function localTime(value) { return value.replace('T', ' '); }
 function newSchedule(value) { return value.length === 16 ? value + ':00' : value; }
 
-function displayTime(value) {
+function displayTime(value, compact = false) {
   // Format the stored wall-clock fields without applying a timezone offset.
   const date = new Date(value + 'Z');
-  return Number.isNaN(date.getTime()) ? localTime(value)
-    : new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }).format(date);
+  if (Number.isNaN(date.getTime())) return localTime(value);
+  const showWeekday = compact && date.getUTCFullYear() === new Date().getFullYear();
+  const day = date.toLocaleDateString(undefined, {
+    ...(showWeekday ? { weekday: 'short' } : { year: 'numeric' }),
+    month: 'short', day: 'numeric', timeZone: 'UTC'
+  });
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+  return day + ' at ' + time;
 }
 
 function deliveryText(reminder) {
@@ -188,9 +193,10 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
   $('settings').hidden = true;
   $('editor').hidden = false;
   form.hidden = false;
-  $('draft-actions').hidden = nextMode === 'create';
-  $('draft-label').textContent = nextMode === 'edit' ? 'Editing scheduled reminder' : '';
-  $('draft-label').hidden = nextMode !== 'edit';
+  $('cancel').hidden = nextMode === 'create';
+  $('cancel').setAttribute('aria-label', nextMode === 'edit' ? 'Cancel edit' : 'Cancel reuse');
+  $('message-label').textContent = nextMode === 'edit' ? 'Edit message' : 'Message';
+  updateThreadEditing();
   $('message').value = draft.text ?? reminder?.message ?? '';
   resizeMessage();
   originalMessageDisplay = draft.originalMessageDisplay ?? $('message').value;
@@ -223,10 +229,40 @@ function openMessages() {
   showForm(composerDraft.mode, composerDraft.selected, { draft: composerDraft });
 }
 
-function finishComposer() {
+function finishComposer(focus = true) {
   composerDraft = draftBeforeAction ?? { mode: 'create' };
   draftBeforeAction = null;
-  showForm(composerDraft.mode, composerDraft.selected, { reviewed: true, draft: composerDraft });
+  showForm(composerDraft.mode, composerDraft.selected, { reviewed: true, draft: composerDraft, focus });
+}
+
+function threadRow(id) {
+  return $('thread').querySelector(`[data-reminder-id="${id}"]`);
+}
+
+function updateThreadEditing() {
+  $('editor').classList.toggle('editing', mode === 'edit');
+  $('thread').querySelector('.is-editing')?.classList.remove('is-editing');
+  if (mode === 'edit') threadRow(selected.id)?.classList.add('is-editing');
+}
+
+function animateFrom(element, origin) {
+  if (!element || !origin || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const offset = Math.max(-16, Math.min(16, origin.top - element.getBoundingClientRect().top));
+  element.animate([{ transform: `translateY(${offset}px)` }, { transform: 'none' }],
+    { duration: 160, easing: 'ease-out' });
+}
+
+function returnToEditedMessage(id, origin) {
+  const row = threadRow(id);
+  (row?.querySelector('.bubble-more') ?? $('conversation-title')).focus();
+  animateFrom(row?.querySelector('.bubble'), origin);
+}
+
+function cancelComposer() {
+  const id = mode === 'edit' ? selected.id : null;
+  const origin = $('message').getBoundingClientRect();
+  finishComposer(id === null);
+  if (id !== null) returnToEditedMessage(id, origin);
 }
 
 function showBrowse(name = activeView, saved = false) {
@@ -307,7 +343,10 @@ async function openAction(nextMode, id) {
       rememberComposer();
       if (composerDraft.mode === 'create') draftBeforeAction = composerDraft;
       else if (composerDraft.dirty && !window.confirm('Discard the unfinished changes in Messages?')) return;
+      const origin = nextMode === 'edit' && !$('editor').hidden
+        ? threadRow(id)?.querySelector('.bubble').getBoundingClientRect() : null;
       showForm(nextMode, reminder, { reviewed: true });
+      animateFrom($('message'), origin);
       rememberComposer();
     }
   } catch {
@@ -392,12 +431,23 @@ function renderThread() {
   thread.replaceChildren();
   for (const reminder of visible) {
     const item = node('li', undefined, 'bubble-row');
+    item.dataset.reminderId = reminder.id;
+    const content = node('div', undefined, 'bubble-content');
     const bubble = node('p', reminder.message, 'message bubble');
-    if (reminder.feedback === 'WAITING') bubble.classList.add('scheduled');
-    item.append(bubble);
-    const status = reminder.feedback === 'WAITING' ? 'Scheduled for ' + displayTime(reminder.scheduledAt)
-      : reminder.feedback === 'LEGACY_SENT' ? 'Previously sent' : 'Sent (simulated)';
-    item.append(node('p', status, 'bubble-meta hint'));
+    if (reminder.feedback === 'WAITING') {
+      bubble.classList.add('scheduled');
+      const timestamp = node('time', displayTime(reminder.scheduledAt, true));
+      timestamp.dateTime = reminder.scheduledAt;
+      const stamp = node('p', undefined, 'bubble-time hint');
+      stamp.append(node('span', 'Scheduled for ', 'sr-only'), timestamp);
+      item.append(stamp);
+    }
+    content.append(bubble);
+    item.append(content);
+    if (reminder.feedback !== 'WAITING') {
+      const status = reminder.feedback === 'LEGACY_SENT' ? 'Previously sent' : 'Sent (simulated)';
+      item.append(node('p', status, 'bubble-meta hint'));
+    }
     if (reminder.canEdit) {
       const more = node('button', '⋯', 'bubble-more quiet');
       more.type = 'button';
@@ -416,11 +466,12 @@ function renderThread() {
       edit.dataset.selection = '';
       edit.setAttribute('aria-label', 'Edit ' + reminder.message);
       actions.append(edit);
-      item.append(more, actions);
+      content.prepend(more, actions);
     }
     thread.append(item);
   }
   if (!visible.length && loaded.upcoming && loaded.history) thread.append(node('li', 'No messages yet.', 'hint thread-empty'));
+  updateThreadEditing();
 }
 
 async function refreshList(name, background = false) {
@@ -649,6 +700,7 @@ async function mutate(kind, id, body) {
   }
   if (kind === 'reuse') clearRetry();
   dirty = false; needsReview = false;
+  const editOrigin = kind === 'edit' ? $('message').getBoundingClientRect() : null;
   if (kind === 'create' || kind === 'edit' || (kind === 'reuse' && composerDraft.mode === 'reuse' && composerDraft.selected?.id === id)) {
     finishComposer();
   } else if (kind === 'reuse') {
@@ -659,6 +711,9 @@ async function mutate(kind, id, body) {
   const savedText = kind === 'withdraw' ? 'Reminder withdrawn.' : kind === 'edit' ? 'Changes saved.' : 'Reminder scheduled.';
   toast(savedText, 4000);
   await refreshLists();
+  if (editOrigin && mode === 'create' && document.activeElement === $('conversation-title')) {
+    returnToEditedMessage(id, editOrigin);
+  }
 }
 
 form.addEventListener('input', (event) => {
@@ -700,7 +755,7 @@ $('settings-tab').addEventListener('click', openSettings);
 for (const [id, name] of [['home', 'upcoming'], ['history-tab', 'history']]) {
   $(id).addEventListener('click', () => { if (showBrowse(name)) refreshLists(); });
 }
-$('cancel').addEventListener('click', finishComposer);
+$('cancel').addEventListener('click', cancelComposer);
 
 const numberPath = '/api/settings/reminder-number';
 async function loadReminderNumber() {
