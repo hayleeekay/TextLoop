@@ -357,7 +357,6 @@ async function reviewCurrentReminder() {
 
 function renderCard(reminder, name) {
   const row = node('li', undefined, 'reminder-card');
-  row.dataset.feedback = reminder.feedback;
   if (reminder.withdrawnAt) row.classList.add('withdrawn');
   row.append(node('h2', reminder.message, 'message'));
   const labels = { ACCEPTED: 'Sent (simulated)', RETRY_WAITING: 'Retry scheduled',
@@ -395,11 +394,12 @@ function renderSchedule(reminders) {
   const scheduled = reminders.filter((reminder) => reminder.feedback === 'WAITING');
   const attention = reminders.filter((reminder) => reminder.feedback !== 'WAITING');
   const result = document.createDocumentFragment();
-  for (const [heading, items] of [
-    ['Next up', scheduled.slice(0, 1)], ['Needs attention', attention], ['Coming up', scheduled.slice(1)]
+  for (const [heading, items, className] of [
+    ['Next up', scheduled.slice(0, 1), 'next-up'], ['Needs attention', attention], ['Coming up', scheduled.slice(1)]
   ]) {
     if (!items.length) continue;
     const group = node('section', undefined, 'schedule-group');
+    if (className) group.classList.add(className);
     const list = node('ul');
     for (const reminder of items) list.append(renderCard(reminder, 'upcoming'));
     group.append(node('h2', heading), list);
