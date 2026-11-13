@@ -374,7 +374,11 @@ function renderCard(reminder, name) {
   if (reminder.withdrawnAt && reminder.feedback === 'ACCEPTED') {
     meta.append(node('span', 'Simulated send accepted'));
   }
-  if (reminder.phoneNumber !== recipient) meta.append(node('span', 'To ' + reminder.phoneNumber));
+  if (name === 'history') {
+    meta.append(node('span', 'Recipient: ' + reminder.phoneNumber));
+  } else if (reminder.phoneNumber !== recipient) {
+    meta.append(node('span', 'To ' + reminder.phoneNumber));
+  }
   row.append(meta);
   if (attention) row.append(node('p', deliveryText(reminder), 'attention-text'));
   const actions = node('div', undefined, 'actions');

@@ -123,12 +123,16 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .next-up .reminder-card { border-inline-start: .2rem solid var(--primary); }
 #history .reminder-card {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .35rem .65rem;
-  background: var(--card);
+  background: var(--tint);
 }
-#history .reminder-card.withdrawn { background: var(--surface); }
+#history .reminder-card.withdrawn { background: transparent; }
+#history .withdrawn .message { color: var(--soft); font-weight: 500; }
 #history .reminder-card > :not(.actions) { grid-column: 1; }
 #history .reminder-card > .actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 #history .meta { margin: 0; }
+#history .meta span { overflow-wrap: anywhere; }
+#history .actions button { background: var(--surface); border-color: var(--control); color: var(--primary); }
+#history .actions button:hover { background: var(--paper); }
 .message { white-space: pre-wrap; overflow-wrap: anywhere; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .65rem; margin: .35rem 0 .65rem; color: var(--soft); font-size: .875rem; }
 .attention-text { color: var(--warn); margin-bottom: .6rem; }
