@@ -128,27 +128,6 @@ function navigation(id) {
   });
 }
 
-function showTimeFields(open) {
-  $('time-toggle').setAttribute('aria-expanded', open);
-  $('time-fields').hidden = !open;
-}
-
-function updateTimePreview() {
-  const value = scheduleValue();
-  let label = value ? displayTime(value) : 'Set a new time';
-  if (value) {
-    const day = value.slice(0, 10);
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    if (day === deviceTime(tomorrow).slice(0, 10)) {
-      const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
-      label = 'Tomorrow at ' + clock.format(new Date(value + 'Z'));
-    }
-  }
-  $('time-preview').textContent = label;
-  $('time-toggle').setAttribute('aria-label', 'Send later: ' + label);
-}
-
 function scheduleValue() {
   const date = $('send-date').value;
   const time = $('send-time').value;
@@ -179,7 +158,7 @@ function rememberComposer() {
   if ($('editor').hidden || !isComposer()) return;
   composerDraft = {
     mode, selected, originalMessageDisplay, dirty, needsReview,
-    text: $('message').value, date: $('send-date').value, time: $('send-time').value, timeOpen: !$('time-fields').hidden
+    text: $('message').value, date: $('send-date').value, time: $('send-time').value
   };
 }
 
@@ -215,7 +194,6 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
     $('editor-help').textContent = 'Make a change before this alert sends.';
   }
   $('conversation').hidden = !isComposer();
-  $('time-toggle').hidden = !isComposer();
   $('cancel').hidden = nextMode === 'create';
   $('draft-recipient').hidden = nextMode !== 'reuse' || reminder.phoneNumber === recipient;
   $('draft-recipient').textContent = nextMode === 'reuse' ? 'Uses the original number: ' + reminder.phoneNumber : '';
@@ -227,18 +205,13 @@ function showForm(nextMode, reminder = null, { reviewed = false, draft = {}, foc
     : nextMode === 'create' ? tomorrowMorning() : '').split('T');
   $('send-date').value = draft.date ?? date;
   $('send-time').value = draft.time ?? time ?? '';
-  $('time-help').textContent = nextMode === 'edit'
-    ? 'Current time: ' + localTime(reminder.scheduledAt) + '. Leave the time unchanged to keep it exactly, or choose a new future time.'
-    : 'Uses the server’s timezone.';
-  showTimeFields(!isComposer() || (draft.timeOpen ?? nextMode === 'reuse'));
-  updateTimePreview();
   $('save').textContent = isComposer() ? '↑' : 'Save changes';
   $('save').setAttribute('aria-label', isComposer() ? 'Schedule text' : 'Save changes');
   if (isComposer()) navigation('messages-tab');
   if (needsReview) reviewRequired('Review the saved reminder before scheduling again.');
   controls();
   if (focus) {
-    const target = nextMode === 'reuse' ? 'time-toggle' : nextMode === 'create' ? 'conversation-title' : 'editor-title';
+    const target = nextMode === 'reuse' ? 'send-date' : nextMode === 'create' ? 'conversation-title' : 'editor-title';
     $(target).focus();
   }
 }
@@ -382,7 +355,7 @@ async function reviewCurrentReminder() {
   }
 }
 
-function renderCard(reminder, name, expanded) {
+function renderCard(reminder, name) {
   const row = node('li', undefined, 'reminder-card');
   row.dataset.feedback = reminder.feedback;
   row.append(node('h2', reminder.message, 'message'));
@@ -394,8 +367,14 @@ function renderCard(reminder, name, expanded) {
   const attention = ['RETRY_WAITING', 'RETRY_EXHAUSTED', 'PERMANENT_REJECTION',
     'DELIVERY_UNCERTAIN', 'UNTRACKED', 'INCONSISTENT_DELIVERY'].includes(reminder.feedback);
   const meta = node('div', undefined, 'meta');
-  meta.append(node('span', 'Scheduled for ' + displayTime(reminder.scheduledAt)),
-    node('span', reminder.withdrawnAt ? 'Withdrawn' : labels[reminder.feedback] ?? 'Refresh details', attention ? 'badge attention' : 'badge'));
+  const time = reminder.withdrawnAt
+    ? 'Withdrawn ' + displayTime(reminder.withdrawnAt)
+    : displayTime(reminder.scheduledAt);
+  meta.append(node('span', time));
+  if (!reminder.withdrawnAt && reminder.feedback !== 'WAITING') {
+    meta.append(node('span', labels[reminder.feedback] ?? 'Needs review', attention ? 'badge attention' : 'badge'));
+  }
+  if (reminder.phoneNumber !== recipient) meta.append(node('span', 'To ' + reminder.phoneNumber));
   row.append(meta);
   if (attention) row.append(node('p', deliveryText(reminder), 'attention-text'));
   const actions = node('div', undefined, 'actions');
@@ -409,19 +388,10 @@ function renderCard(reminder, name, expanded) {
   }
   for (const action of actions.children) action.dataset.selection = '';
   if (actions.children.length) row.append(actions);
-  const details = node('details');
-  details.dataset.reminderId = String(reminder.id);
-  details.open = expanded.has(String(reminder.id));
-  details.append(node('summary', 'View details'));
-  const body = node('div', undefined, 'saved-details');
-  body.append(node('p', 'To: ' + reminder.phoneNumber),
-    node('p', 'Scheduled: ' + localTime(reminder.scheduledAt)), node('p', deliveryText(reminder)));
-  if (reminder.withdrawnAt) body.append(node('p', 'Withdrawn: ' + localTime(reminder.withdrawnAt)));
-  details.append(body); row.append(details);
   return row;
 }
 
-function renderSchedule(reminders, expanded) {
+function renderSchedule(reminders) {
   const scheduled = reminders.filter((reminder) => reminder.feedback === 'WAITING');
   const attention = reminders.filter((reminder) => reminder.feedback !== 'WAITING');
   const result = document.createDocumentFragment();
@@ -431,7 +401,7 @@ function renderSchedule(reminders, expanded) {
     if (!items.length) continue;
     const group = node('section', undefined, 'schedule-group');
     const list = node('ul');
-    for (const reminder of items) list.append(renderCard(reminder, 'upcoming', expanded));
+    for (const reminder of items) list.append(renderCard(reminder, 'upcoming'));
     group.append(node('h2', heading), list);
     result.append(group);
   }
@@ -483,11 +453,10 @@ async function refreshList(name, background = false) {
       || $('thread').contains(document.activeElement) || JSON.stringify(loaded[name]) === JSON.stringify(reminders))) {
       return true;
     }
-    const expanded = new Set([...target.querySelectorAll('details[open]')].map((item) => item.dataset.reminderId));
     loaded[name] = reminders;
     renderThread();
-    const list = name === 'upcoming' ? renderSchedule(reminders, expanded) : node('ul');
-    if (name === 'history') for (const reminder of reminders) list.append(renderCard(reminder, name, expanded));
+    const list = name === 'upcoming' ? renderSchedule(reminders) : node('ul');
+    if (name === 'history') for (const reminder of reminders) list.append(renderCard(reminder, name));
     const empty = node('div', undefined, 'empty');
     empty.append(node('h2', name === 'upcoming' ? 'No reminders waiting' : 'Nothing here yet.'));
     if (name === 'upcoming') empty.append(node('p', 'Schedule a text whenever you need a reminder.', 'hint'));
@@ -583,7 +552,6 @@ function mutationError(kind, failure) {
       : failure.status === 404 ? 'This reminder is no longer available.'
       : 'Could not save. Check the required message, phone number, and date/time.'));
     if (failure.code === 'INVALID_SCHEDULE' && !form.hidden) {
-      showTimeFields(true);
       setTimeout(() => $('send-date').focus(), 0);
     }
   }
@@ -709,12 +677,8 @@ async function mutate(kind, id, body) {
 form.addEventListener('input', (event) => {
   dirty = true;
   ++detailRead;
-  updateTimePreview();
   if (event.target === $('message')) resizeMessage();
 });
-form.addEventListener('invalid', (event) => {
-  if (event.target === $('send-date') || event.target === $('send-time')) showTimeFields(true);
-}, true);
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (saving || needsReview || uncertainCreate || !form.reportValidity()) return;
@@ -754,7 +718,6 @@ for (const id of ['back', 'cancel']) $(id).addEventListener('click', () => {
   else if (mode === 'edit' && editFromMessages) openMessages();
   else if (showBrowse()) refreshLists();
 });
-$('time-toggle').addEventListener('click', () => showTimeFields($('time-fields').hidden));
 $('recipient-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const value = $('phone').value.trim();
@@ -774,12 +737,14 @@ $('theme').addEventListener('change', () => {
   setPreference('textloop.theme', $('theme').value);
 });
 const palette = $('palette');
-palette.value = preference('textloop.palette', 'purple');
-if (!palette.value) palette.value = 'purple';
-document.documentElement.dataset.palette = palette.value;
-palette.addEventListener('change', () => {
-  document.documentElement.dataset.palette = palette.value;
-  setPreference('textloop.palette', palette.value);
+const savedPalette = preference('textloop.palette', 'purple');
+const paletteChoices = [...palette.querySelectorAll('input')];
+const selectedPalette = paletteChoices.find((choice) => choice.value === savedPalette) ?? paletteChoices[0];
+selectedPalette.checked = true;
+document.documentElement.dataset.palette = selectedPalette.value;
+palette.addEventListener('change', (event) => {
+  document.documentElement.dataset.palette = event.target.value;
+  setPreference('textloop.palette', event.target.value);
 });
 window.addEventListener('resize', resizeMessage);
 document.addEventListener('visibilitychange', refreshInBackground);

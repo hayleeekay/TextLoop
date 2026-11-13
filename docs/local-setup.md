@@ -78,8 +78,8 @@ to this computer; it currently has no authentication.
 
 1. Open **Messages** and type a reminder. The local app starts with the fictional
    number `+12035550100`. You can change it in **Settings**.
-2. The composer starts with tomorrow at 9 AM. To try a reminder sooner, tap the
-   time row, choose a time a few minutes ahead, then tap the send arrow.
+2. The composer starts with tomorrow at 9 AM. To try a reminder sooner, edit the
+   date and time above your message, then tap the send arrow.
 3. Open **Schedule** to edit the reminder before sending begins or withdraw it.
 4. For a reminder left scheduled, wait until it is due. The server checks every
    minute, and the page updates while it is open.

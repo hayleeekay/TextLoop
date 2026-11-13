@@ -41,17 +41,9 @@
     <form id="reminder-form" class="panel">
       <fieldset id="fields" disabled>
         <legend class="sr-only">Reminder details</legend>
-        <div id="send-later">
-          <button id="time-toggle" type="button" aria-controls="time-fields" aria-expanded="false">
-            <span aria-hidden="true">◷</span><span id="time-preview"></span><span class="time-chevron" aria-hidden="true">⌄</span>
-          </button>
-          <div id="time-fields">
-            <div class="time-inputs">
-              <label>Date<input id="send-date" type="date" required aria-describedby="time-help"></label>
-              <label>Time<input id="send-time" type="time" step="60" required aria-describedby="time-help"></label>
-            </div>
-            <p id="time-help" class="hint">Times use the server's timezone.</p>
-          </div>
+        <div class="time-inputs" role="group" aria-label="Send later">
+          <label>Date<input id="send-date" type="date" required></label>
+          <label>Time<input id="send-time" type="time" step="60" required></label>
         </div>
         <div class="message-input">
           <label for="message">Message</label>
@@ -85,20 +77,53 @@
       <option value="light">Light</option>
       <option value="dark">Dark</option>
     </select>
-    <label for="palette">Color theme</label>
-    <select id="palette">
-      <option value="purple">Purple</option>
-      <option value="pink">Pink</option>
-      <option value="red">Red</option>
-      <option value="orange">Orange</option>
-      <option value="yellow">Yellow</option>
-      <option value="green">Green</option>
-      <option value="cyan">Cyan</option>
-      <option value="blue">Blue</option>
-      <option value="brown">Brown</option>
-      <option value="black">Black</option>
-      <option value="colorful">Colorful</option>
-    </select>
+    <fieldset id="palette" class="palette">
+      <legend>Color theme</legend>
+      <label class="palette-option" data-swatch="purple">
+        <input type="radio" name="palette" value="purple" class="sr-only" checked>
+        <span class="swatch" aria-hidden="true"></span><span>Purple</span>
+      </label>
+      <label class="palette-option" data-swatch="pink">
+        <input type="radio" name="palette" value="pink" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Pink</span>
+      </label>
+      <label class="palette-option" data-swatch="red">
+        <input type="radio" name="palette" value="red" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Red</span>
+      </label>
+      <label class="palette-option" data-swatch="orange">
+        <input type="radio" name="palette" value="orange" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Orange</span>
+      </label>
+      <label class="palette-option" data-swatch="yellow">
+        <input type="radio" name="palette" value="yellow" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Yellow</span>
+      </label>
+      <label class="palette-option" data-swatch="green">
+        <input type="radio" name="palette" value="green" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Green</span>
+      </label>
+      <label class="palette-option" data-swatch="cyan">
+        <input type="radio" name="palette" value="cyan" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Cyan</span>
+      </label>
+      <label class="palette-option" data-swatch="blue">
+        <input type="radio" name="palette" value="blue" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Blue</span>
+      </label>
+      <label class="palette-option" data-swatch="brown">
+        <input type="radio" name="palette" value="brown" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Brown</span>
+      </label>
+      <label class="palette-option" data-swatch="black">
+        <input type="radio" name="palette" value="black" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Black</span>
+      </label>
+      <label class="palette-option" data-swatch="colorful">
+        <input type="radio" name="palette" value="colorful" class="sr-only">
+        <span class="swatch" aria-hidden="true"></span><span>Colorful</span>
+      </label>
+    </fieldset>
     <form id="recipient-form">
       <h2>Your number</h2>
       <label for="phone">Default number for reminders</label>
@@ -107,9 +132,6 @@
       <button type="submit">Save number</button>
     </form>
   </section>
-  <footer>
-    <p>Local preview. No real texts are sent. Times use the server's local timezone.</p>
-  </footer>
   <noscript><p>Enable JavaScript to use TextLoop.</p></noscript>
 </main>
 </body>
