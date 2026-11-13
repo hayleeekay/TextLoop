@@ -18,8 +18,6 @@
   --secondary-button: color-mix(in srgb, var(--surface) 52%, var(--tint));
   --sent: var(--tint);
   --scheduled: var(--tint);
-  --time-band: light-dark(color-mix(in srgb, var(--surface) 75%, var(--tint)),
-    color-mix(in srgb, var(--tint) 88%, var(--ink)));
   --thread-background: var(--surface);
   --butter: light-dark(#f5e8ba, #4c4230);
   --warn: light-dark(#724118, #f5c99c);
@@ -70,7 +68,6 @@
   --next: var(--mint);
   --sent: radial-gradient(ellipse at 95% 5%, var(--mint), transparent 72%), var(--blue);
   --scheduled: radial-gradient(ellipse at 10% 0%, var(--peach), transparent 75%), var(--rose);
-  --time-band: light-dark(#faf2d9, #554c36);
   --thread-background: linear-gradient(var(--thread-wash), var(--thread-wash)), var(--clouds);
   --thread-wash: color-mix(in srgb, var(--surface) 78%, transparent);
 }
@@ -224,7 +221,7 @@ textarea { resize: vertical; }
 .bubble-meta button { margin-block: -.15rem; padding-inline: .4rem; }
 .composer .panel {
   position: sticky; bottom: 0; z-index: 1; border: 0; border-top: 1px solid var(--line);
-  padding: .65rem 1rem; border-radius: 0 0 1.35rem 1.35rem; background: var(--accent);
+  padding: .5rem 1rem .75rem; border-radius: 0 0 1.35rem 1.35rem; background: var(--surface);
 }
 .composer fieldset {
   max-width: 40rem; margin-inline: auto;
@@ -232,17 +229,22 @@ textarea { resize: vertical; }
 .time-inputs { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: .5rem; }
 .time-inputs label { min-width: 0; margin: 0; font-size: .8125rem; }
 .time-inputs input { margin-top: .15rem; padding-inline: .35rem; font-size: 1rem; font-weight: 500; }
-.composer .time-inputs {
-  padding: .35rem .65rem .2rem; border-bottom: 1px solid var(--line); border-radius: .65rem .65rem 0 0;
-  background: var(--time-band);
+.composer .time-inputs label {
+  display: flex; flex-wrap: wrap; align-items: center; column-gap: .4rem;
+  padding-inline: .55rem; color: var(--soft);
 }
-.composer .time-inputs input { border: 0; background: transparent; padding-inline: 0; }
-.composer .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem; align-items: end; margin-top: .25rem; }
+.composer .time-inputs input {
+  width: auto; max-width: 100%; margin-top: 0; border: 0; background: transparent;
+  padding: .25rem 0; color: var(--ink);
+}
+.composer .message-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-top: .3rem; }
 .composer .message-input label, .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .composer textarea {
-  min-height: 2.75rem; max-height: clamp(2.75rem, 35dvh, 12rem); padding: .625rem;
-  border: 0; border-radius: .75rem; background: transparent; resize: none; overflow-y: auto;
+  min-height: 2.75rem; max-height: clamp(2.75rem, 35dvh, 12rem); padding: .625rem .85rem;
+  border: 0; border-radius: 1rem; background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--control); resize: none; overflow-y: auto;
 }
+.composer textarea::placeholder { color: var(--soft); opacity: 1; }
 .composer #save { min-width: 2.75rem; padding: 0; border-radius: 50%; font-size: 1.35rem; }
 .composer .form-actions { justify-content: end; margin-top: .3rem; }
 #editor:not(.composer) #save { margin-top: .5rem; }
