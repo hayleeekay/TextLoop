@@ -14,6 +14,8 @@ hosted API.
 | [Withdraw a reminder](#withdraw-a-reminder) | `POST /api/reminders/{id}/withdraw` | `200 OK` |
 | [Remind me again](#remind-me-again) | `POST /api/reminders/{id}/remind-again` | `200 OK` |
 | [Retrieve reminders](#retrieve-reminders) | `GET /api/reminders` | `200 OK` |
+| [Read the reminder number](#reminder-number) | `GET /api/settings/reminder-number` | `200 OK` |
+| [Save the reminder number](#reminder-number) | `PUT /api/settings/reminder-number` | `200 OK` |
 | [Simulate an inbound reply](#simulate-an-inbound-reply) | `POST /api/inbound-replies` | `204 No Content` |
 | [Check health](#check-health) | `GET /health` | `200 OK` |
 
@@ -45,13 +47,14 @@ Most common letters count as one unit. Emojis like 😀 count as two units.
 ### Example request
 
 Choose a future scheduled time before running the request.
+The example uses the [reminder number](#reminder-number) saved in Settings, or
+the fictional demo number if you haven’t saved one.
 
 ```bash
 curl -i --request POST http://localhost:8080/api/reminders \
   --header 'Content-Type: application/json' \
   --data '{
     "message": "Take a walk",
-    "phoneNumber": "+12035550100",
     "scheduledAt": "2030-01-15T14:30:00"
   }'
 ```
@@ -72,7 +75,8 @@ curl -i --request POST http://localhost:8080/api/reminders \
 }
 ```
 
-The response includes the submitted fields plus:
+The response includes the message, scheduled time, resolved phone number, and
+the following fields.
 
 | Field | JSON type | Description |
 | --- | --- | --- |
@@ -135,7 +139,7 @@ intent from sending, including after restart. Earlier snapshots stay unchanged.
 
 `POST /api/reminders/{id}/withdraw`
 
-Remove a pending reminder from Home and stop further attempts, without deleting its
+Remove a pending reminder from Schedule and stop further attempts, without deleting its
 saved records or marking anything complete. This also works for held, failed, and
 uncertain reminders. An attempt already in progress may still send.
 
@@ -158,7 +162,7 @@ no claim has happened. An edit still requires a new future time.
 Withdrawal requires an unwithdrawn `PENDING` reminder and its current version. It can
 stop future attempts in any delivery state, including missing or inconsistent delivery
 information, without changing that evidence. Sent and already withdrawn reminders are
-inactive and cannot be withdrawn again. The website offers Withdraw only on Home.
+inactive and cannot be withdrawn again. The website offers Withdraw only on Schedule.
 
 Claims, edits, and withdrawal serialize on the reminder lock. If withdrawal commits
 first, no new attempt can claim it. If a claim commits first, that attempt may finish;
@@ -247,6 +251,24 @@ Validation and conflict failures save nothing. Persistence failures return
 `503 SAVE_FAILED` without database details. Retry the unchanged operation UUID and
 payload to resolve whether a save committed when its response was lost.
 
+## Reminder number
+
+`GET /api/settings/reminder-number` returns the number used by the local app.
+Before a number is saved, it returns `200 OK` with the fictional demo number
+and `configured: false`.
+
+`PUT /api/settings/reminder-number` saves one number for the app. Send JSON such
+as `{"phoneNumber":"+12035550100"}`. Use a leading `+` and 2 to 15 digits, with a
+nonzero first digit. The app checks the format only. A successful save returns
+`200 OK` with `{"phoneNumber":"+12035550100","configured":true}`. Invalid or
+missing input returns `400 Bad Request`. If the save fails or its commit cannot
+be confirmed, the API returns `503 Service Unavailable`.
+
+New reminders and Reuse pick up the saved number. Ordinary reminders already
+scheduled use it when their first attempt starts. An attempt already in progress
+can finish with its original number. Retries for a different number are held,
+and recovery cannot authorize another submission to that old number.
+
 ## What happens next
 
 The normal application's scheduler runs at a 60-second interval by default. It
@@ -254,16 +276,9 @@ checks due `PENDING` reminders, but the reminder status alone does not authorize
 send. A separate delivery record determines whether submission is permitted.
 
 Creating a reminder saves a delivery ID and a snapshot of the rendered message.
-At first submission, the delivery records the current reminder number. Retries
-use the same ID and payload, and stop if that number differs from the current
-setting. A submission already in progress can finish. New snapshots contain
+Retries keep the same ID and payload. New snapshots contain
 `TextLoop Reminder:` followed by the message,
 without reply instructions. Historical snapshots keep their original text.
-
-`GET /api/settings/reminder-number` reads the local server's reminder number.
-`PUT /api/settings/reminder-number` saves it using JSON such as
-`{"phoneNumber":"+12035550100"}`. Use a plus sign and a country code. This setting
-is for the local, simulated app.
 
 For an eligible delivery, TextLoop:
 
@@ -357,13 +372,14 @@ To observe background processing, retrieve the list again after a reminder becom
 due. Its status changes to `SENT` after sender acceptance is recorded and finalized.
 For reminders that remain `PENDING`, see [Retries and recovery](#retries-and-recovery).
 
-### Home, Upcoming, History, Recent, and detail
+### Schedule, Upcoming, History, Recent, and detail
 
 - `GET /api/reminders/upcoming`: unwithdrawn `PENDING` reminders scheduled strictly
   after the current server-local time, ordered by scheduled time then ID, ascending.
-- `GET /api/reminders/home`: unwithdrawn `PENDING` reminders without recorded sender
-  acceptance, ordered by scheduled time then ID, ascending. Due reminders, retries,
-  failures, and uncertain sends stay here, including beyond seven days.
+- `GET /api/reminders/home` (Schedule): unwithdrawn `PENDING` reminders without
+  recorded sender acceptance, ordered by scheduled time then ID, ascending. Due
+  reminders, retries, failures, and uncertain sends stay here, including beyond
+  seven days.
 - `GET /api/reminders/history`: sent and withdrawn reminders from the last seven days.
   Sent reminders use `scheduledAt`; withdrawn reminders use `withdrawnAt`. Results are
   ordered by that time then ID, descending. The lower boundary is exclusive and the

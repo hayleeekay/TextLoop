@@ -1,15 +1,17 @@
 # Local delivery recovery
 
-Stop the normal application before running recovery. Use the same private database
-settings as your local application. Recovery is for the single-instance, fake-SMS
+Stop the normal application before running recovery. Use the project’s
+[Java setup](local-setup.md#get-the-project-and-java) and keep the
+[local database](local-setup.md#start-postgresql) running with the same connection
+variables as the app. Recovery is for the single-instance, fake-SMS
 workflow; it disables HTTP and scheduled processing and never submits an SMS itself.
 The stopped-application acknowledgement is an operator check, not a process lock.
 
 Build and list delivery records:
 
 ```sh
-./mvnw -DskipTests package
-java -jar target/textloop-0.0.1-SNAPSHOT.jar --textloop.recovery=true
+mise exec -- ./mvnw -DskipTests package
+mise exec -- java -jar target/textloop-0.0.1-SNAPSHOT.jar --textloop.recovery=true
 ```
 
 The first startup initializes missing delivery records for legacy pending reminders.
@@ -43,7 +45,7 @@ To authorize one more attempt for an exhausted retryable rejection, copy the cur
 UUID and version from the list into this command:
 
 ```sh
-java -jar target/textloop-0.0.1-SNAPSHOT.jar --textloop.recovery=true \
+mise exec -- java -jar target/textloop-0.0.1-SNAPSHOT.jar --textloop.recovery=true \
   --recovery.action=retry-once --recovery.delivery=DELIVERY_UUID \
   --recovery.version=VERSION --recovery.app-stopped=true
 ```
