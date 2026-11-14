@@ -1,132 +1,76 @@
-# TextLoop
+<h1 align="center">TextLoop</h1>
+<p align="center"><strong>Schedule a text to your future self.</strong><br>
+Get the reminder and carry on. No checkbox or reply required.</p>
+<p align="center">Local preview · Simulated SMS<br>
+Runs locally without authentication or real SMS.<br>
+<a href="docs/local-setup.md">Run it locally</a> ·
+<a href="docs/api-guide.md">API guide</a></p>
 
-TextLoop is a reminder app built around text messages. The idea is simple: schedule
-a text, get a reminder, and carry on. No completion checkbox or response required.
-Snoozing by text reply is planned.
+![TextLoop’s Messages screen with a simulated send, two scheduled reminders, and a draft above the send arrow.](docs/screenshots/messages.png)
 
-## Problem
+## Why I made it
 
 Do you ever set a reminder on your phone only for it to show up along with all the
 rest of your notifications, then you just clear all your notifications and ignore it?
 Even if I make it repeat daily for a month, I will likely ignore it the entire time.
+
 Whether this is because of my ADHD or not, I'm not sure. You know what I don't ignore
 though? Texts. What I love is when I have an appointment and the business sends me a
 text reminder. Then I can leave it unread for days, but I'm constantly wondering what
-that notification is so I keep checking it, and I never forget it. At some point, I
-even started asking friends to use the `Send Later` iMessage feature for reminders,
-which is where this idea came from. Bottom line: I'm far more likely to consider a
-text than a traditional notification.
+that notification is so I keep checking it, and I never forget it.
 
-## Status
+At some point, I even started asking friends to use the `Send Later` iMessage feature
+for reminders, which is where this idea came from. Bottom line: I'm far more likely
+to consider a text than a traditional notification.
 
-TextLoop is in development, with a working local web app and simulated sending.
-It does not send real texts and is not ready for public use.
+## How I designed it
 
-Currently implemented:
+I wanted TextLoop to do one thing and feel easy to use with ADHD. When I think
+of something I need to remember, I want to get it out of my head while it’s
+still there.
 
-- Create reminders through the web app or API and store them in PostgreSQL
-- Schedule from Messages, then edit or withdraw reminders from Schedule
-- Check for due reminders every minute and simulate sender acceptance
-- Browse sent and withdrawn reminders from the last seven days in History
-- Use Reuse to bring a past reminder back into the composer and pick a new time
-- Keep unresolved sends visible in Schedule, with bounded retries and recovery safeguards
-- Run automated tests in GitHub Actions
+- **Open it and start typing.** TextLoop opens straight to Messages. The date
+  and time are already set to tomorrow at 9 AM, so if that works, I can just
+  type the reminder and tap the arrow.
+- **Keep the controls familiar.** Creating, editing, and reusing a reminder
+  all use the same message box with the date and time right above it. Edit and
+  Reuse open it over the tab I’m already on, so I always know where to look.
+- **Make it easy to try again.** I can check **Schedule** for what’s coming up
+  or withdraw a reminder if I change my mind. If I miss one, **History** shows
+  the last seven days of sent and withdrawn reminders. **Reuse** fills in the
+  old message, and I pick a fresh time.
 
-Simulated reply receipt and a standalone command parser also exist, but replies do
-not change reminders yet.
+![TextLoop’s History screen with simulated sends, a withdrawn reminder, and Reuse buttons.](docs/screenshots/history.png)
 
-For endpoint contracts and local request examples, see the [API guide](docs/api-guide.md).
+### A little color
 
-## Running Locally
+The fun part of building this for my own ADHD brain was picking the colors.
+The pastel **Colorful** theme in these screenshots is my favorite. You can
+pick your own color and switch between light and dark mode in **Settings**.
 
-To try the web UI with simulated sending, follow the [local setup guide](docs/local-setup.md).
-It covers Java, PostgreSQL, starting the app, and a first reminder. No SMS account is needed.
+![Swatches from four other TextLoop themes: Purple, Pink, Green, and Blue.](docs/screenshots/color-themes.png)
 
-## First Version Goal
+## How it works
 
-Make it easy to schedule individual reminder texts and get another reminder when
-needed, without maintaining a task list.
+TextLoop uses Java 25 and Spring Boot, PostgreSQL for storage, and a plain
+JavaScript frontend. A scheduler checks for due reminders every minute and
+submits them to a simulated SMS sender.
 
-```text
-schedule a reminder in the web app
-    -> store it
-    -> detect when it is due
-    -> send the reminder (simulated for now)
-```
+TextLoop keeps the reminder and its send attempt separate. If the outcome is
+unknown, it holds the attempt for review so an automatic retry doesn’t risk a
+second text. If the sender’s acceptance was already recorded, TextLoop can
+finish updating the reminder without submitting it again.
 
-## Architecture
+## Setup and tests
 
-The local interface uses plain HTML, CSS, and JavaScript served by Spring Boot.
-The backend uses a feature-oriented structure:
+The [local setup guide](docs/local-setup.md) walks through Java 25, PostgreSQL,
+and scheduling a first reminder. Run the tests with `mise exec -- ./mvnw verify`
+while Docker is running. GitHub Actions runs the same tests. See the
+[delivery recovery guide](docs/delivery-recovery.md) for recovery commands.
 
-```text
-HTTP request
-    -> Controller and request/response DTOs
-    -> Service and business rules
-    -> Spring Data repository
-    -> Hibernate / JPA
-    -> PostgreSQL
-```
+## What’s next
 
-Reminder delivery currently follows:
-
-```text
-Scheduler
-    -> Reminder service
-    -> select due reminders with an eligible delivery
-    -> commit UNKNOWN before submitting
-    -> SmsService interface
-    -> FakeSmsService
-    -> record sender acceptance
-    -> finalize reminder as SENT
-```
-
-Known retryable rejections have a bounded retry budget. Uncertain submissions remain
-held for [local recovery](docs/delivery-recovery.md).
-
-A real SMS implementation can later replace the fake sender without tying reminder
-logic to a specific provider.
-
-## Tech Stack
-
-- Backend: Java 25 and Spring Boot
-- Build tool: Maven
-- Database: PostgreSQL
-- Persistence: Spring Data JPA and Hibernate
-- Frontend: HTML, CSS, and JavaScript served by Spring Boot
-- SMS: simulated during development, then a real provider after the backend loop works
-- Workflow: GitHub Issues, pull requests, and Java 25 tests in GitHub Actions
-
-## Development Direction
-
-The local scheduling and reuse flow is working. The next functional step is connecting
-simulated replies to snooze, with clear targeting and duplicate-reply handling.
-
-Later work includes:
-
-- A more polished web interface
-- Timezone-aware scheduling
-- Versioned database migrations
-- A real SMS provider
-- Deployment and operational safeguards
-- Privacy, security, cost, consent, and messaging-requirement reviews before public use
-
-## Constraints
-
-- Keep infrastructure and service costs below $20/month where practical.
-- Prioritize simple, maintainable architecture.
-- Do not pay for or depend on real SMS before the reminder engine works.
-- Do not treat development shortcuts as production-ready decisions.
-- There is no user authentication yet.
-- Phone number is only a temporary identity during early development.
-
-## Future Ideas
-
-- Daily affirmations and motivational texts curated to the user
-- Recurring reminders
-- Natural-language reply parsing
-- Habit tracking with text check-ins
-- AI-assisted reminder and habit management
-- Dashboard and history analytics
-- Better handling for multiple active reminders
-- User accounts and authentication
+Snoozing by text reply is planned. TextLoop can already receive a simulated
+reply and parse the command separately. The next step is connecting the two so
+a reply affects the intended reminder and a duplicate reply event gets handled
+once. Follow along in [the snooze issue](https://github.com/hayleeekay/TextLoop/issues/18).
