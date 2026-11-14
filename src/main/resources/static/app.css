@@ -179,8 +179,10 @@ input, textarea, select {
 }
 textarea { resize: vertical; }
 .form-actions { margin-top: .75rem; }
-.settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1rem; }
 .settings .hint { margin: .4rem 0 .65rem; }
+.settings-group { margin-top: .85rem; padding-top: .15rem; border-top: 1px solid var(--line); }
+.settings-group .hint { margin-bottom: 0; }
 .palette { margin-top: 1rem; }
 #palette-label { margin-bottom: .35rem; font-weight: 600; }
 .palette-trigger, .palette-option {
