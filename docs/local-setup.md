@@ -77,14 +77,20 @@ to this computer; it currently has no authentication.
 ## Try a reminder
 
 1. Open **Messages** and type a reminder. The local app starts with the fictional
-   number `+12035550100`. You can change it in **Settings**.
+   number `+12035550100`. Confirm a new number in **Settings** to use it for
+   reminders that haven't started sending, including ones already scheduled.
+   Retries to a different number stop. A send already in progress can finish.
+   If you saved a number in an older browser preview, Settings offers it for
+   confirmation. Until you confirm it, existing scheduled reminders keep their
+   stored number and new reminders use the demo number.
 2. The composer starts with tomorrow at 9 AM. To try a reminder sooner, edit the
    date and time above your message, then tap the send arrow.
-3. Open **Schedule** to edit the reminder before sending begins or withdraw it.
+3. Open **Schedule** to withdraw a reminder or edit it in the Messages composer
+   before sending begins.
 4. For a reminder left scheduled, wait until it is due. The server checks every
    minute, and the page updates while it is open.
 5. Find it in **History**, which shows sent and withdrawn reminders for seven days.
-   **Again** copies the text into Messages, where you can edit it and choose a new time.
+   **Reuse** copies the text into Messages, where you can edit it and choose a new time.
 
 “Sent (simulated)” means the fake sender accepted it. No text reaches a phone.
 Replies do not snooze reminders yet. Times use the server's local timezone, so use

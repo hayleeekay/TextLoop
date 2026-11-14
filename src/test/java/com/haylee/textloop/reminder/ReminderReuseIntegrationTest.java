@@ -268,7 +268,7 @@ class ReminderReuseIntegrationTest {
         var request = request(source);
         var result = save(source, request).getBody();
         assertThat(result.message()).isEqualTo("  ");
-        assertThat(result.phoneNumber()).isEqualTo(legacyPhone);
+        assertThat(result.phoneNumber()).isEqualTo(PHONE);
         assertThat(sourceRows(source)).isEqualTo(before);
         clock.advance(Duration.ofDays(2));
         boot();

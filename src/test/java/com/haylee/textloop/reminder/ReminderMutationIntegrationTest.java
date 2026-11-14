@@ -7,6 +7,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +43,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.haylee.textloop.PostgreSQLTestConfiguration;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
+import com.haylee.textloop.reminder.dto.RemindAgainRequest;
 import com.haylee.textloop.reminder.dto.ReminderResponse;
 import com.haylee.textloop.reminder.dto.WithdrawReminderRequest;
 import com.haylee.textloop.sms.SmsSubmissionResult;
@@ -66,6 +69,44 @@ class ReminderMutationIntegrationTest {
     @BeforeEach
     void clearRows() {
         reminders.deleteAll();
+        jdbc.update("delete from reminder_number");
+    }
+
+    @Test
+    void settingsNumberAppliesToExistingSchedulesAndReuse() {
+        var created = create();
+        var newNumber = "+12035550101";
+        var settingsPath = "/api/settings/reminder-number";
+        assertThat(http.exchange(settingsPath, HttpMethod.PUT,
+                new HttpEntity<>(Map.of("phoneNumber", "invalid")), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(http.exchange(settingsPath, HttpMethod.PUT,
+                new HttpEntity<>(Map.of("phoneNumber", newNumber)), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(http.getForObject(settingsPath, String.class)).contains(newNumber);
+        var scheduled = http.postForEntity("/api/reminders",
+                new CreateReminderRequest("Another reminder", created.scheduledAt().plusDays(1), null),
+                ReminderResponse.class);
+        assertThat(scheduled.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(scheduled.getBody().phoneNumber()).isEqualTo(newNumber);
+
+        var deliveryId = reminders.findById(created.id()).orElseThrow().getCurrentDeliveryId();
+        var first = transactions.claim(deliveryId, created.scheduledAt()).orElseThrow();
+        assertThat(first.phoneNumber()).isEqualTo(newNumber);
+        transactions.recordResult(deliveryId, first.attemptCount(), SmsSubmissionResult.retryableRejection());
+
+        var updatedNumber = "+12035550102";
+        http.put(settingsPath, Map.of("phoneNumber", updatedNumber));
+        assertThat(transactions.claim(deliveryId, created.scheduledAt().plusDays(1))).isEmpty();
+        var stopped = deliveries.findById(deliveryId).orElseThrow();
+        assertThat(stopped.isStoppedByNumberChange()).isTrue();
+        assertThat(stopped.getPhoneNumber()).isEqualTo(newNumber);
+        var source = reminders.findById(created.id()).orElseThrow();
+        var reused = http.postForEntity("/api/reminders/" + source.getId() + "/remind-again",
+                new RemindAgainRequest(UUID.randomUUID(),
+                        source.getVersion(), created.scheduledAt().plusDays(1)), ReminderResponse.class);
+        assertThat(reused.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(reused.getBody().phoneNumber()).isEqualTo(updatedNumber);
     }
 
     private ReminderResponse create() {

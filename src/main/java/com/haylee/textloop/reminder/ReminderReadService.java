@@ -97,6 +97,11 @@ public class ReminderReadService {
         if (reminder.getStatus() == ReminderStatus.SENT) {
             return delivery.getState() == DeliveryState.ACCEPTED ? Feedback.ACCEPTED : Feedback.INCONSISTENT_DELIVERY;
         }
+        if (delivery.isStoppedByNumberChange()) {
+            // A stopped READY intent is a replacement for a still-unconfirmed submission.
+            return delivery.getState() == DeliveryState.READY
+                    ? Feedback.DELIVERY_UNCERTAIN : Feedback.REMINDER_NUMBER_CHANGED;
+        }
         return switch (delivery.getState()) {
             case READY -> DeliveryPolicy.editable(delivery)
                     ? reminder.getWithdrawnAt() == null ? Feedback.WAITING : Feedback.WITHDRAWN
