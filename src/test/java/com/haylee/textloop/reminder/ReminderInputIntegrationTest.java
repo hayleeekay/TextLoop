@@ -277,7 +277,7 @@ class ReminderInputIntegrationTest {
         var withdrawn = service.withdrawReminder(id, edited.path("version").asLong());
         var reuse = new Target(BASE + "/" + id + "/remind-again", HttpMethod.POST, id, withdrawn.version());
         var reused = json.readTree(request(reuse, body(reuse, future())).getBody());
-        assertPayload(reused, editedMessage, phone);
+        assertPayload(reused, editedMessage, PHONE);
         assertThat(jdbc.queryForList("select message from deliveries where reminder_id = ? order by created_at, id", String.class, id))
                 .containsExactlyInAnyOrder("TextLoop Reminder:\n" + message, "TextLoop Reminder:\n" + editedMessage);
     }

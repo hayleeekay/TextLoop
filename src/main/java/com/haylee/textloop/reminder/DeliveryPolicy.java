@@ -9,7 +9,8 @@ final class DeliveryPolicy {
     private DeliveryPolicy() {}
 
     static boolean editable(Delivery delivery) {
-        return delivery.getState() == DeliveryState.READY && delivery.getAttemptCount() == 0;
+        return delivery.getState() == DeliveryState.READY && delivery.getAttemptCount() == 0
+                && !delivery.isStoppedByNumberChange();
     }
 
     static boolean reusable(Delivery delivery) {
@@ -20,12 +21,14 @@ final class DeliveryPolicy {
         if (delivery.getState() == DeliveryState.ACCEPTED) return true;
         if (reminder.getStatus() != ReminderStatus.PENDING) return false;
         if (delivery.getState() == DeliveryState.PERMANENT_REJECTION) return true;
+        if (delivery.isStoppedByNumberChange()) return delivery.getState() == DeliveryState.RETRYABLE_REJECTION;
         return reminder.getWithdrawnAt() != null
                 && (editable(delivery) || (delivery.getState() == DeliveryState.RETRYABLE_REJECTION
                     && (delivery.getNextAttemptAt() != null || exhausted(delivery))));
     }
 
     static boolean eligible(Delivery delivery, LocalDateTime now) {
+        if (delivery.isStoppedByNumberChange()) return false;
         if (delivery.getState() == DeliveryState.READY) {
             return true;
         }
@@ -54,7 +57,8 @@ final class DeliveryPolicy {
             case FINALIZE -> delivery.getState() == DeliveryState.ACCEPTED;
             case CONFIRM_ACCEPTED, CONFIRM_RETRYABLE_REJECTION, CONFIRM_PERMANENT_REJECTION ->
                 delivery.getState() == DeliveryState.UNKNOWN;
-            case RETRY_ONCE -> delivery.getReminder().getWithdrawnAt() == null && exhausted(delivery);
+            case RETRY_ONCE -> delivery.getReminder().getWithdrawnAt() == null
+                    && !delivery.isStoppedByNumberChange() && exhausted(delivery);
             case REPLACE_UNKNOWN -> delivery.getReminder().getWithdrawnAt() == null
                     && delivery.getState() == DeliveryState.UNKNOWN && acknowledgeDuplicateRisk;
         };

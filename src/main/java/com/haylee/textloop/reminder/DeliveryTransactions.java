@@ -20,23 +20,47 @@ import com.haylee.textloop.sms.SmsSubmissionResult;
 @Service
 @Transactional(propagation = Propagation.REQUIRES_NEW)
 public class DeliveryTransactions {
+    private static final String DEMO_NUMBER = "+12035550100";
     private final ReminderRepository reminders;
     private final DeliveryRepository deliveries;
     private final ReminderReuseRepository reuses;
+    private final ReminderNumberRepository numbers;
     private final Clock clock;
 
     public DeliveryTransactions(ReminderRepository reminders, DeliveryRepository deliveries,
-            ReminderReuseRepository reuses, Clock clock) {
+            ReminderReuseRepository reuses, ReminderNumberRepository numbers, Clock clock) {
         this.reminders = reminders;
         this.deliveries = deliveries;
         this.reuses = reuses;
+        this.numbers = numbers;
         this.clock = clock;
+    }
+
+    public String reminderNumber() {
+        return configuredNumber().orElse(DEMO_NUMBER);
+    }
+
+    public record NumberSetting(String phoneNumber, boolean configured) {}
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public NumberSetting numberSetting() {
+        var number = configuredNumber();
+        return new NumberSetting(number.orElse(DEMO_NUMBER), number.isPresent());
+    }
+
+    public void setReminderNumber(String phoneNumber) {
+        numbers.setNumber(phoneNumber);
+    }
+
+    private Optional<String> configuredNumber() {
+        return numbers.findById(1).map(ReminderNumber::phoneNumber);
     }
 
     public Reminder createReminder(CreateReminderRequest request) {
         LocalDateTime scheduledAt = canonicalSchedule(request.scheduledAt());
         requireFutureSchedule(scheduledAt);
-        return persistReminder(request.message(), request.phoneNumber(), scheduledAt);
+        String fallback = request.phoneNumber() == null ? DEMO_NUMBER : request.phoneNumber();
+        return persistReminder(request.message(), configuredNumber().orElse(fallback), scheduledAt);
     }
 
     private Reminder persistReminder(String message, String phoneNumber, LocalDateTime scheduledAt) {
@@ -79,7 +103,7 @@ public class DeliveryTransactions {
         }
         requireFutureSchedule(scheduledAt);
         String message = request.message() == null ? source.getMessage() : request.message();
-        Reminder result = persistReminder(message, source.getPhoneNumber(), scheduledAt);
+        Reminder result = persistReminder(message, reminderNumber(), scheduledAt);
         reuses.save(new ReminderReuse(source, request.operationId(), request.expectedVersion(),
                 scheduledAt, request.message(), result));
         return result;
@@ -150,8 +174,24 @@ public class DeliveryTransactions {
                 || !DeliveryPolicy.eligible(delivery, cutoff)) {
             return Optional.empty();
         }
+        String number = configuredNumber().orElse(delivery.getPhoneNumber());
+        if (!delivery.getPhoneNumber().equals(number)) {
+            if (!DeliveryPolicy.editable(delivery) || isRecoveryReplacement(delivery)) {
+                delivery.stopForNumberChange(now());
+                return Optional.empty();
+            }
+            delivery.routeFirstAttemptTo(number);
+            reminder.setPhoneNumber(number);
+        }
         delivery.beginAttempt(now());
         return Optional.of(new Submission(id, delivery.getAttemptCount(), delivery.getPhoneNumber(), delivery.getMessage()));
+    }
+
+    private boolean isRecoveryReplacement(Delivery delivery) {
+        UUID previousId = delivery.getReplacesDeliveryId();
+        return previousId != null && deliveries.findById(previousId)
+                .map(previous -> previous.getRecoveryAction() == RecoveryAction.REPLACE_UNKNOWN)
+                .orElse(true);
     }
 
     public void recordResult(UUID id, int attemptCount, SmsSubmissionResult result) {
@@ -178,6 +218,10 @@ public class DeliveryTransactions {
             throw new RecoveryConflictException();
         }
         DeliveryPolicy.requireRecoveryAction(delivery, action, acknowledgeDuplicateRisk);
+        if ((action == RecoveryAction.RETRY_ONCE || action == RecoveryAction.REPLACE_UNKNOWN)
+                && configuredNumber().filter(number -> !number.equals(delivery.getPhoneNumber())).isPresent()) {
+            throw new RecoveryConflictException();
+        }
         LocalDateTime now = now();
         UUID resultingId = id;
         switch (action) {
@@ -217,7 +261,8 @@ public class DeliveryTransactions {
                     delivery.getState(), delivery.getReason(), delivery.getAttemptCount(), delivery.getNextAttemptAt(),
                     delivery.isExtraAttemptPermitted(), DeliveryPolicy.exhausted(delivery),
                     delivery.getId().equals(reminder.getCurrentDeliveryId()), reminder.getStatus(), reminder.getWithdrawnAt(),
-                    delivery.getRecoveryAction(), delivery.getRecoveredAt(), delivery.getReplacesDeliveryId());
+                    delivery.getRecoveryAction(), delivery.getRecoveredAt(), delivery.getReplacesDeliveryId(),
+                    delivery.isStoppedByNumberChange());
         }).toList();
     }
 
@@ -280,5 +325,5 @@ public class DeliveryTransactions {
             DeliveryReason reason, int attemptCount, LocalDateTime nextAttemptAt, boolean extraAttemptPermitted,
             boolean retryExhausted, boolean current, ReminderStatus reminderStatus, LocalDateTime withdrawnAt,
             RecoveryAction recoveryAction,
-            LocalDateTime recoveredAt, UUID replacesDeliveryId) {}
+            LocalDateTime recoveredAt, UUID replacesDeliveryId, boolean stoppedByNumberChange) {}
 }
