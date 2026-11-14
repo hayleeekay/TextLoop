@@ -16,7 +16,7 @@ hosted API.
 | [Retrieve reminders](#retrieve-reminders) | `GET /api/reminders` | `200 OK` |
 | [Read the reminder number](#reminder-number) | `GET /api/settings/reminder-number` | `200 OK` |
 | [Save the reminder number](#reminder-number) | `PUT /api/settings/reminder-number` | `200 OK` |
-| [Simulate an inbound reply](#simulate-an-inbound-reply) | `POST /api/inbound-replies` | `204 No Content` |
+| [Simulate an inbound reply](#simulate-an-inbound-reply) | `POST /api/inbound-replies` | `200 OK` or `204 No Content` |
 | [Check health](#check-health) | `GET /health` | `200 OK` |
 
 POST and PUT requests use JSON with `Content-Type: application/json`. Example phone
@@ -275,10 +275,10 @@ The normal application's scheduler runs at a 60-second interval by default. It
 checks due `PENDING` reminders, but the reminder status alone does not authorize a
 send. A separate delivery record determines whether submission is permitted.
 
-Creating a reminder saves a delivery ID and a snapshot of the rendered message.
-Retries keep the same ID and payload. New snapshots contain
-`TextLoop Reminder:` followed by the message,
-without reply instructions. Historical snapshots keep their original text.
+Creating a reminder saves a delivery ID and a snapshot of the reminder text.
+When sending to the current reminder number for the first time, TextLoop records
+the snooze duration and uses it in the footer. Retries keep the same ID, text,
+and footer. Historical snapshots keep their original text.
 
 For an eligible delivery, TextLoop:
 
@@ -431,19 +431,19 @@ These reads have the same local, unauthenticated scope as the existing list.
 
 `POST /api/inbound-replies`
 
-Submit a simulated incoming message to exercise the receipt endpoint. It
-acknowledges input without interpreting commands, saving replies, or changing
-reminders.
+Submit a simulated incoming message. With an `eventId`, a bare `SNOOZE` applies
+to the latest reminder sent to the current Settings number. The newest attempt
+must be accepted and available for snoozing. An uncertain or already snoozed
+reminder does not fall back to an older one. Only sends tracked by this feature
+are considered.
 
 ### Request fields
 
-All fields are required and cannot be `null`. Both strings must be nonblank.
-Accepted values pass through unchanged, without trimming or case conversion.
-
 | Field | JSON type | Constraints and behavior |
 | --- | --- | --- |
-| `fromPhoneNumber` | string | No phone-format validation or explicit field-length limit. |
-| `body` | string | No command validation or explicit field-length limit. |
+| `fromPhoneNumber` | string | Required and nonblank. Must match the current reminder number to snooze. |
+| `body` | string | Required and nonblank. The snooze command ignores case and surrounding whitespace. |
+| `eventId` | string (UUID) | Supply a new ID for each incoming reply and reuse it when retrying that same reply. Omission preserves the receipt-only behavior. |
 
 ### Example request
 
@@ -452,16 +452,25 @@ curl -i --request POST http://localhost:8080/api/inbound-replies \
   --header 'Content-Type: application/json' \
   --data '{
     "fromPhoneNumber": "+12035550100",
-    "body": "DONE"
+    "body": "SNOOZE",
+    "eventId": "74d40022-bd56-44cc-9ae7-c88d2ac5e316"
   }'
 ```
 
 ### Successful response
 
-`204 No Content`, with an empty response body.
+`200 OK` with `replyText`, `scheduledAt`, and `replayed`. A successful snooze
+creates one fresh reminder using the duration advertised in the original text.
+An unrecognized reply can get one hint while that reminder is still eligible.
+Fields without a reply or schedule are `null`. If `replayed` is true, it is the
+previous result. Display the returned text once. The endpoint sends no SMS.
 
-Submitting `DONE` does not complete a reminder. Other nonblank messages are also
-accepted because the receipt endpoint does not use command parsing yet.
+`GET /api/settings/snooze-duration` reads the default as `{"minutes":30}`. To change
+it, `PUT` the same shape with 15, 30, 60, 120, 1440, 2880, or 10080 minutes.
+New reminder texts use the updated value.
+
+Requests without an event ID still return an empty `204 No Content` and leave
+reminders unchanged.
 
 ### Errors
 
@@ -474,6 +483,9 @@ For example, setting `body` to `"   "` produces an empty `400` response. Replace
 with a nonblank string and resubmit.
 
 Unlike reminder validation errors, inbound reply errors have no JSON body to parse.
+If a save returns an empty `503 Service Unavailable`, retry with the same event ID.
+A committed reply keeps its original result. If the transaction rolled back, the
+retry evaluates the latest reminder at that point.
 
 ## Check health
 

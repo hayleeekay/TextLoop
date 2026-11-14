@@ -418,6 +418,7 @@ function openSettings() {
   $('settings').hidden = false;
   navigation('settings-tab');
   void loadReminderNumber();
+  void loadSnoozeDuration();
 }
 
 function summary(reminder, container) {
@@ -925,6 +926,47 @@ $('cancel').addEventListener('click', cancelComposer);
 editDialog.addEventListener('cancel', (event) => {
   event.preventDefault();
   cancelComposer();
+});
+
+const snoozePath = '/api/settings/snooze-duration';
+const snoozeDuration = $('snooze-duration');
+let savingSnooze = false;
+let snoozeRead = 0;
+
+async function loadSnoozeDuration() {
+  if (savingSnooze) return;
+  const read = ++snoozeRead;
+  snoozeDuration.disabled = true;
+  try {
+    const { minutes } = await requestJson(snoozePath);
+    if (read !== snoozeRead) return;
+    snoozeDuration.value = String(minutes);
+    if (!snoozeDuration.value) throw {};
+    snoozeDuration.disabled = false;
+  } catch {
+    if (read === snoozeRead && !$('settings').hidden) {
+      notice('Could not load your snooze duration. Reopen Settings to try again.');
+    }
+  }
+}
+
+snoozeDuration.addEventListener('change', async () => {
+  const minutes = Number(snoozeDuration.value);
+  savingSnooze = snoozeDuration.disabled = true;
+  try {
+    const saved = await requestJson(snoozePath, 'PUT', { minutes });
+    if (saved.minutes !== minutes) throw {};
+    snoozeDuration.disabled = false;
+    if (!$('settings').hidden) notice('Snooze duration saved.');
+  } catch {
+    savingSnooze = false;
+    await loadSnoozeDuration();
+    if (!$('settings').hidden && !snoozeDuration.disabled) {
+      notice('Check the snooze duration shown in Settings.');
+    }
+  } finally {
+    savingSnooze = false;
+  }
 });
 
 const numberPath = '/api/settings/reminder-number';

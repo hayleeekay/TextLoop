@@ -35,6 +35,13 @@ public class Delivery {
     @Column(nullable = false, updatable = false, columnDefinition = "text")
     private String message;
 
+    private Integer snoozeMinutes;
+    @Column(length = 160)
+    private String snoozeFooter;
+    private Long submissionOrder;
+    private Long snoozedReminderId;
+    private Boolean snoozeHintSent;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private DeliveryState state;
@@ -104,6 +111,39 @@ public class Delivery {
         updatedAt = now;
     }
 
+    void prepareSubmission(long order, int minutes, boolean includeSnooze) {
+        submissionOrder = order;
+        if (includeSnooze) {
+            snoozeMinutes = minutes;
+            snoozeFooter = "\n\nNeed a little more time? Reply SNOOZE for "
+                    + SnoozeSetting.durationText(minutes) + ".";
+        }
+    }
+
+    Integer snoozeMinutes() {
+        return snoozeMinutes;
+    }
+
+    String submissionMessage() {
+        return snoozeFooter == null ? message : message + snoozeFooter;
+    }
+
+    boolean wasSnoozed() {
+        return snoozedReminderId != null;
+    }
+
+    void recordSnooze(long reminderId) {
+        snoozedReminderId = reminderId;
+    }
+
+    boolean offerSnoozeHint() {
+        if (Boolean.TRUE.equals(snoozeHintSent)) {
+            return false;
+        }
+        snoozeHintSent = true;
+        return true;
+    }
+
     void recordOutcome(DeliveryState state, DeliveryReason reason, String reference,
             LocalDateTime retryAt, LocalDateTime now) {
         this.state = state;
@@ -129,6 +169,8 @@ public class Delivery {
         // An intentional replacement repeats the original snapshot, not a mutable reminder.
         phoneNumber = previous.phoneNumber;
         message = previous.message;
+        snoozeMinutes = previous.snoozeMinutes;
+        snoozeFooter = previous.snoozeFooter;
     }
 
     void linkPrevious(Delivery previous) {

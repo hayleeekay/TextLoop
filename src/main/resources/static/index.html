@@ -127,6 +127,20 @@
         <p class="hint">Use your own number with its country code. Sending is simulated.</p>
         <button id="save-number" type="submit" class="primary" disabled>Save number</button>
       </form>
+      <section class="panel">
+        <h2>Snooze</h2>
+        <label for="snooze-duration">Snooze duration</label>
+        <select id="snooze-duration" aria-describedby="snooze-hint" disabled>
+          <option value="15">15 minutes</option>
+          <option value="30" selected>30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+          <option value="1440">1 day</option>
+          <option value="2880">2 days</option>
+          <option value="10080">1 week</option>
+        </select>
+        <p id="snooze-hint" class="hint">Reply SNOOZE to get your most recent reminder again. Changes apply to future texts.</p>
+      </section>
     </div>
   </section>
   <noscript><p>Enable JavaScript to use TextLoop.</p></noscript>

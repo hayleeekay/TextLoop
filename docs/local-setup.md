@@ -94,8 +94,9 @@ to this computer; it currently has no authentication.
    new time to schedule it again.
 
 “Sent (simulated)” means the fake sender accepted it. No text reaches a phone.
-Replies do not snooze reminders yet. Times use the server's local timezone, so use
-this preview on the same computer as the backend for now.
+You can change the snooze duration in **Settings** and [simulate a reply through the
+API](api-guide.md#simulate-an-inbound-reply). Times use the server's local timezone,
+so use this preview on the same computer as the backend for now.
 
 ## Stop and come back later
 

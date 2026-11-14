@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
 import com.haylee.textloop.reminder.dto.RemindAgainRequest;
+import com.haylee.textloop.reply.ReplyCommand;
 import com.haylee.textloop.sms.SmsSubmissionResult;
 
 /** Short committed units of work. The sender is deliberately absent from these transactions. */
@@ -25,14 +26,19 @@ public class DeliveryTransactions {
     private final DeliveryRepository deliveries;
     private final ReminderReuseRepository reuses;
     private final ReminderNumberRepository numbers;
+    private final SnoozeSettingRepository snoozeSettings;
+    private final SnoozeReplyRepository snoozeReplies;
     private final Clock clock;
 
     public DeliveryTransactions(ReminderRepository reminders, DeliveryRepository deliveries,
-            ReminderReuseRepository reuses, ReminderNumberRepository numbers, Clock clock) {
+            ReminderReuseRepository reuses, ReminderNumberRepository numbers,
+            SnoozeSettingRepository snoozeSettings, SnoozeReplyRepository snoozeReplies, Clock clock) {
         this.reminders = reminders;
         this.deliveries = deliveries;
         this.reuses = reuses;
         this.numbers = numbers;
+        this.snoozeSettings = snoozeSettings;
+        this.snoozeReplies = snoozeReplies;
         this.clock = clock;
     }
 
@@ -49,7 +55,47 @@ public class DeliveryTransactions {
     }
 
     public void setReminderNumber(String phoneNumber) {
+        deliveries.lockSubmissionOrder();
         numbers.setNumber(phoneNumber);
+    }
+
+    public int snoozeMinutes() {
+        return snoozeSettings.findById(1).map(SnoozeSetting::minutes).orElse(SnoozeSetting.DEFAULT_MINUTES);
+    }
+
+    public void setSnoozeMinutes(int minutes) {
+        deliveries.lockSubmissionOrder();
+        snoozeSettings.save(new SnoozeSetting(minutes));
+    }
+
+    public SimulatedReply applySimulatedReply(UUID eventId, String phoneNumber, ReplyCommand command, boolean offerHint) {
+        deliveries.lockSubmissionOrder();
+        var previous = snoozeReplies.findById(eventId);
+        if (previous.isPresent()) {
+            return previous.get().isFrom(phoneNumber)
+                    ? previous.get().result(true) : new SimulatedReply(null, null, false);
+        }
+        String replyText = null;
+        LocalDateTime scheduledAt = null;
+        boolean ownNumber = reminderNumber().equals(phoneNumber);
+        var latest = ownNumber ? deliveries.findLatestPossibleSend(phoneNumber) : Optional.<UUID>empty();
+        if (latest.isPresent()) {
+            Delivery source = lock(latest.get());
+            if (source.getState() == DeliveryState.ACCEPTED && source.snoozeMinutes() != null
+                    && !source.wasSnoozed()) {
+                if (command == ReplyCommand.SNOOZE) {
+                    int minutes = source.snoozeMinutes();
+                    scheduledAt = canonicalSchedule(now().plusMinutes(minutes));
+                    Reminder reminder = persistReminder(source.getReminder().getMessage(), phoneNumber, scheduledAt);
+                    source.recordSnooze(reminder.getId());
+                    replyText = "Okay, I'll remind you again in " + SnoozeSetting.durationText(minutes) + ".";
+                } else if (offerHint && source.offerSnoozeHint()) {
+                    replyText = "I didn't catch that. Try SNOOZE.";
+                }
+            }
+        }
+        return snoozeReplies.save(new SnoozeReply(eventId, ownNumber ? phoneNumber : null,
+                replyText, scheduledAt)).result(false);
     }
 
     private Optional<String> configuredNumber() {
@@ -168,6 +214,8 @@ public class DeliveryTransactions {
     }
 
     public Optional<Submission> claim(UUID id, LocalDateTime cutoff) {
+        // Serialize the ordering decision with reply processing. The lock ends before sending.
+        deliveries.lockSubmissionOrder();
         Delivery delivery = lock(id);
         Reminder reminder = delivery.getReminder();
         if (!currentPending(delivery) || reminder.getScheduledAt().isAfter(cutoff)
@@ -183,8 +231,13 @@ public class DeliveryTransactions {
             delivery.routeFirstAttemptTo(number);
             reminder.setPhoneNumber(number);
         }
+        if (number.equals(reminderNumber())) {
+            boolean includeSnooze = delivery.getAttemptCount() == 0 && !isRecoveryReplacement(delivery);
+            delivery.prepareSubmission(deliveries.nextSubmissionOrder(), snoozeMinutes(), includeSnooze);
+        }
         delivery.beginAttempt(now());
-        return Optional.of(new Submission(id, delivery.getAttemptCount(), delivery.getPhoneNumber(), delivery.getMessage()));
+        return Optional.of(new Submission(id, delivery.getAttemptCount(), delivery.getPhoneNumber(),
+                delivery.submissionMessage()));
     }
 
     private boolean isRecoveryReplacement(Delivery delivery) {
@@ -195,6 +248,7 @@ public class DeliveryTransactions {
     }
 
     public void recordResult(UUID id, int attemptCount, SmsSubmissionResult result) {
+        deliveries.lockSubmissionOrder();
         Delivery delivery = lock(id);
         if (!currentPendingIntent(delivery) || delivery.getState() != DeliveryState.UNKNOWN
                 || delivery.getAttemptCount() != attemptCount) {
@@ -213,6 +267,7 @@ public class DeliveryTransactions {
     }
 
     public UUID recover(UUID id, long expectedVersion, RecoveryAction action, boolean acknowledgeDuplicateRisk) {
+        deliveries.lockSubmissionOrder();
         Delivery delivery = lock(id);
         if (delivery.getVersion() != expectedVersion || !currentPendingIntent(delivery)) {
             throw new RecoveryConflictException();
