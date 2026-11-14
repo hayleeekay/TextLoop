@@ -68,9 +68,8 @@ and scheduling a first reminder. Run the tests with `mise exec -- ./mvnw verify`
 while Docker is running. GitHub Actions runs the same tests. See the
 [delivery recovery guide](docs/delivery-recovery.md) for recovery commands.
 
-## What’s next
+## Snooze by reply
 
-Snoozing by text reply is planned. TextLoop can already receive a simulated
-reply and parse the command separately. The next step is connecting the two so
-a reply affects the intended reminder and a duplicate reply event gets handled
-once. Follow along in [the snooze issue](https://github.com/hayleeekay/TextLoop/issues/18).
+I wanted a quick way to say “give me a little longer.” You can change the
+default snooze duration in Settings and [simulate a `SNOOZE` reply](docs/api-guide.md#simulate-an-inbound-reply)
+to your latest reminder.

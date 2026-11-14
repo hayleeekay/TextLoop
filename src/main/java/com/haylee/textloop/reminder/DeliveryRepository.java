@@ -11,6 +11,21 @@ import org.springframework.data.jpa.repository.Query;
 import jakarta.persistence.LockModeType;
 
 public interface DeliveryRepository extends JpaRepository<Delivery, UUID> {
+    @Query(value = "select true from pg_advisory_xact_lock(1952807028, 1)", nativeQuery = true)
+    boolean lockSubmissionOrder();
+
+    @Query("select coalesce(max(d.submissionOrder), 0) + 1 from Delivery d")
+    long nextSubmissionOrder();
+
+    @Query("""
+            select d.id from Delivery d
+            where d.submissionOrder is not null and d.phoneNumber = :phoneNumber
+                and d.state in ('UNKNOWN', 'ACCEPTED')
+            order by d.submissionOrder desc
+            limit 1
+            """)
+    Optional<UUID> findLatestPossibleSend(String phoneNumber);
+
     @Query("select d.reminder.id from Delivery d where d.id = :id")
     Optional<Long> findReminderId(UUID id);
 

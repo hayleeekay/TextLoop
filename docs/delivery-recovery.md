@@ -79,8 +79,8 @@ outcome confirmation and acceptance finalization remain available, but `retry-on
 and `replace-unknown` are refused. Confirmation never reactivates the withdrawn alert.
 Do not reset reminder status or edit delivery rows by hand to bypass these checks.
 
-Retries preserve the intended delivery ID. A future snooze must create a new intent;
-text snooze/cancel behavior is not implemented here. The HTTP API can withdraw a
+Retries preserve the intended delivery ID. A simulated snooze creates a new
+reminder and delivery without changing the original outcome. The HTTP API can withdraw a
 pending reminder even after a claim or failure. Withdrawal stops new attempts without
 erasing uncertainty or preventing an in-progress result from being recorded. Separate
 commits protect recorded acceptance from a later reminder-update failure. They do not guarantee exactly-once

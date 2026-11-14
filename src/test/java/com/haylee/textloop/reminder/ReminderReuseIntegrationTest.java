@@ -685,7 +685,8 @@ class ReminderReuseIntegrationTest {
         clock.advance(Duration.ofHours(1));
         service().processDueReminders(now());
         service().processDueReminders(now());
-        verify(sender, times(1)).sendSms(resultDelivery, PHONE, "TextLoop Reminder:\nCorrected source");
+        verify(sender, times(1)).sendSms(resultDelivery, PHONE,
+                "TextLoop Reminder:\nCorrected source\n\nNeed a little more time? Reply SNOOZE for 30 minutes.");
         verifyNoMoreInteractions(sender);
         assertThat(save(source, request).getBody().status()).isEqualTo(ReminderStatus.SENT);
         verifyNoMoreInteractions(sender);

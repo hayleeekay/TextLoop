@@ -88,7 +88,7 @@ class ReminderDueSelectionIntegrationTest {
 
         Mockito.verify(smsService).sendSms(
                 reminder.getCurrentDeliveryId(), "+12035550100",
-                "TextLoop Reminder:\nTake a walk");
+                "TextLoop Reminder:\nTake a walk\n\nNeed a little more time? Reply SNOOZE for 30 minutes.");
         Mockito.verifyNoMoreInteractions(smsService);
     }
 }

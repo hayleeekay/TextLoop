@@ -54,6 +54,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import com.haylee.textloop.LoggingStateExtension;
 import com.haylee.textloop.TextloopApplication;
 import com.haylee.textloop.reminder.dto.CreateReminderRequest;
+import com.haylee.textloop.reply.ReplyCommand;
 import com.haylee.textloop.reminder.dto.EditReminderRequest;
 import com.haylee.textloop.reminder.dto.ReminderViewResponse.Feedback;
 import com.haylee.textloop.scheduler.ReminderScheduler;
@@ -155,6 +156,10 @@ class DeliveryRecoveryIntegrationTest {
     }
 
     private Delivery reload(UUID id) { return deliveryRows().findById(id).orElseThrow(); }
+
+    private String withSnoozeFooter(String snapshot) {
+        return snapshot + "\n\nNeed a little more time? Reply SNOOZE for 30 minutes.";
+    }
     private ReminderStatus reminderStatus(Delivery delivery) {
         return reminderRows().findById(delivery.getReminder().getId()).orElseThrow().getStatus();
     }
@@ -189,7 +194,7 @@ class DeliveryRecoveryIntegrationTest {
                     RecoveryAction.CONFIRM_ACCEPTED, false)).isInstanceOf(RecoveryConflictException.class);
         } else {
             var current = reminderRows().findById(before.getId()).orElseThrow().getCurrentDeliveryId();
-            verify(sender, times(1)).sendSms(current, "+12035550100", "TextLoop Reminder:\nCorrected");
+            verify(sender, times(1)).sendSms(current, "+12035550100", withSnoozeFooter("TextLoop Reminder:\nCorrected"));
         }
         verify(sender, never()).sendSms(eq(old.getId()), anyString(), anyString());
     }
@@ -210,7 +215,7 @@ class DeliveryRecoveryIntegrationTest {
         pass();
         pass();
         var current = reminderRows().findById(created.id()).orElseThrow().getCurrentDeliveryId();
-        verify(sender, times(1)).sendSms(current, "+12035550100", "TextLoop Reminder:\nFuture corrected");
+        verify(sender, times(1)).sendSms(current, "+12035550100", withSnoozeFooter("TextLoop Reminder:\nFuture corrected"));
         verify(sender, never()).sendSms(eq(oldId), anyString(), anyString());
     }
 
@@ -252,8 +257,8 @@ class DeliveryRecoveryIntegrationTest {
         boot();
         clock.advance(Duration.ofDays(1));
         pass();
-        verify(sender, times(1)).sendSms(delivery.getId(), "+12035550100", delivery.getMessage());
-        verify(sender, times(1)).sendSms(healthy.getId(), "+12035550100", healthy.getMessage());
+        verify(sender, times(1)).sendSms(delivery.getId(), "+12035550100", withSnoozeFooter(delivery.getMessage()));
+        verify(sender, times(1)).sendSms(healthy.getId(), "+12035550100", withSnoozeFooter(healthy.getMessage()));
         assertThat(reload(delivery.getId()).getAttemptCount()).isEqualTo(1);
         assertThat(reload(delivery.getId()).getMessage()).isEqualTo(delivery.getMessage());
     }
@@ -369,7 +374,46 @@ class DeliveryRecoveryIntegrationTest {
         removeCommitFailure("reminders");
         boot();
         pass();
-        verify(sender, times(1)).sendSms(delivery.getId(), "+12035550100", delivery.getMessage());
+        verify(sender, times(1)).sendSms(delivery.getId(), "+12035550100", withSnoozeFooter(delivery.getMessage()));
+    }
+
+    @Test
+    void snoozeReplayKeepsItsOriginalOutcomeAfterRestartAndNewerDelivery() {
+        create("Original reminder");
+        pass();
+        var eventId = UUID.randomUUID();
+        var first = transactions().applySimulatedReply(eventId, "+12035550100",
+                ReplyCommand.SNOOZE, false);
+        assertThat(first.scheduledAt()).isEqualTo(now().plusMinutes(30));
+        boot();
+        clock.advance(Duration.ofMinutes(30));
+        pass();
+        var replay = transactions().applySimulatedReply(eventId, "+12035550100",
+                ReplyCommand.SNOOZE, false);
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.scheduledAt()).isEqualTo(first.scheduledAt());
+        assertThat(replay.replyText()).isEqualTo(first.replyText());
+        assertThat(reminderRows().count()).isEqualTo(2);
+        assertThat(transactions().applySimulatedReply(UUID.randomUUID(), "+12035550100",
+                ReplyCommand.SNOOZE, false).scheduledAt()).isEqualTo(now().plusMinutes(30));
+        assertThat(reminderRows().count()).isEqualTo(3);
+    }
+
+    @Test
+    void failedSnoozeCommitLeavesNoChildOrConsumedReply() {
+        create("Original reminder");
+        pass();
+        var eventId = UUID.randomUUID();
+        failCommit("reminders", "NEW.status = 'PENDING'");
+        assertThatThrownBy(() -> transactions().applySimulatedReply(eventId, "+12035550100",
+                ReplyCommand.SNOOZE, false)).isInstanceOf(RuntimeException.class);
+        assertThat(reminderRows().count()).isEqualTo(1);
+
+        removeCommitFailure("reminders");
+        var retried = transactions().applySimulatedReply(eventId, "+12035550100", ReplyCommand.SNOOZE, false);
+        assertThat(retried.replayed()).isFalse();
+        assertThat(retried.scheduledAt()).isEqualTo(now().plusMinutes(30));
+        assertThat(reminderRows().count()).isEqualTo(2);
     }
 
     @Test
@@ -403,6 +447,11 @@ class DeliveryRecoveryIntegrationTest {
         String historic = "TextLoop Reminder:\nHistoric payload\n\nReply DONE, SNOOZE, or CANCEL.";
         jdbc().update("update deliveries set message = ? where id = ?", historic, delivery.getId());
         transactions().claim(delivery.getId(), now());
+        // Simulate a submission recorded before snooze metadata existed.
+        jdbc().update("""
+                update deliveries set snooze_minutes = null, snooze_footer = null, submission_order = null
+                where id = ?
+                """, delivery.getId());
         var beforeDeliveries = jdbc().queryForList("select * from deliveries order by id");
         context.close();
         context = null;
@@ -518,10 +567,11 @@ class DeliveryRecoveryIntegrationTest {
         Reminder reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
         reminder.setMessage("Changed after intent creation");
         reminderRows().save(reminder);
+        transactions().setSnoozeMinutes(15);
         boot();
         clock.advance(Duration.ofMinutes(1));
         pass();
-        verify(sender, times(2)).sendSms(delivery.getId(), "+12035550100", snapshot);
+        verify(sender, times(2)).sendSms(delivery.getId(), "+12035550100", withSnoozeFooter(snapshot));
         assertThat(output).doesNotContain(raw, "+12035550100");
         assertThat(reminderStatus(delivery)).isEqualTo(ReminderStatus.SENT);
     }
