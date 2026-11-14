@@ -1025,6 +1025,12 @@ palette.addEventListener('keydown', (event) => {
   event.preventDefault();
   paletteChoices[next].focus();
 });
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Tab') document.documentElement.setAttribute('data-keyboard-focus', '');
+});
+document.addEventListener('pointerdown', () => {
+  document.documentElement.removeAttribute('data-keyboard-focus');
+});
 window.addEventListener('resize', resizeMessage);
 document.addEventListener('visibilitychange', refreshInBackground);
 setInterval(refreshInBackground, 60000);

@@ -107,8 +107,18 @@ button:disabled { opacity: .6; cursor: default; }
   box-shadow: inset 0 -2px currentColor;
 }
 #reminder-form :is(input, textarea):focus-visible { box-shadow: none; }
+/* Native date and time segments can hold focus inside their input. */
+@media (forced-colors: none) {
+  [data-keyboard-focus] #reminder-form :is(input, textarea):focus-within {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+  [data-keyboard-focus] .schedule-field input:focus-within { border-radius: .35rem; }
+}
 @media (forced-colors: active) {
-  :focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  :focus-visible, [data-keyboard-focus] #reminder-form :is(input, textarea):focus-within {
+    outline: 2px solid Highlight; outline-offset: 2px;
+  }
 }
 .view-heading {
   display: flex; justify-content: space-between; align-items: center; gap: .625rem;
