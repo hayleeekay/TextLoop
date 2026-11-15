@@ -99,6 +99,10 @@ class ReminderReuseIntegrationTest {
     void close() { if (context != null) context.close(); }
 
     private void boot() {
+        boot(false);
+    }
+
+    private void boot(boolean baselineOnMigrate) {
         if (context != null) context.close();
         var application = TextloopApplication.application();
         application.setLogStartupInfo(false);
@@ -106,7 +110,8 @@ class ReminderReuseIntegrationTest {
         context = application.run("--spring.datasource.url=" + postgres.getJdbcUrl(),
                 "--spring.datasource.username=" + postgres.getUsername(),
                 "--spring.datasource.password=" + postgres.getPassword(),
-                "--spring.jpa.hibernate.ddl-auto=update", "--spring.jpa.show-sql=false",
+                "--spring.flyway.baseline-on-migrate=" + baselineOnMigrate,
+                "--spring.jpa.show-sql=false",
                 "--spring.main.web-application-type=servlet", "--server.port=0",
                 "--textloop.scheduling.enabled=false", "--spring.main.banner-mode=off", "--logging.level.root=WARN");
     }
@@ -653,8 +658,8 @@ class ReminderReuseIntegrationTest {
         context.close();
         context = null;
         var independent = new JdbcTemplate(new DriverManagerDataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword()));
-        independent.execute("drop table reminder_reuses");
-        boot();
+        independent.execute("drop table reminder_reuses, flyway_schema_history");
+        boot(true);
         assertThat(sourceRows(source)).isEqualTo(before);
         var request = request(source);
         var result = save(source, request).getBody();

@@ -1,7 +1,8 @@
 # Local delivery recovery
 
-Stop the normal application before running recovery. Use the project’s
-[Java setup](local-setup.md#get-the-project-and-java) and keep the
+Stop the normal application before running recovery. If upgrading an older database,
+[run the database upgrade](local-setup.md#upgrade-a-local-database-created-by-an-older-version) first.
+Use the project’s [Java setup](local-setup.md#get-the-project-and-java) and keep the
 [local database](local-setup.md#start-postgresql) running with the same connection
 variables as the app. Recovery is for the single-instance, fake-SMS
 workflow; it disables HTTP and scheduled processing and never submits an SMS itself.

@@ -79,7 +79,7 @@ class ReminderPersistenceFailureIntegrationTest {
         context = application.run("--spring.datasource.url=" + postgres.getJdbcUrl(),
                 "--spring.datasource.username=" + postgres.getUsername(),
                 "--spring.datasource.password=" + postgres.getPassword(),
-                "--spring.jpa.hibernate.ddl-auto=create-drop", "--spring.jpa.show-sql=false",
+                "--spring.jpa.show-sql=false",
                 "--spring.main.web-application-type=servlet", "--server.port=0",
                 "--textloop.scheduling.enabled=false", "--spring.main.banner-mode=off");
     }
