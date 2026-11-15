@@ -111,7 +111,6 @@ class DeliveryRecoveryIntegrationTest {
         properties.put("spring.datasource.url", postgres.getJdbcUrl());
         properties.put("spring.datasource.username", postgres.getUsername());
         properties.put("spring.datasource.password", postgres.getPassword());
-        properties.put("spring.jpa.hibernate.ddl-auto", "update");
         properties.put("spring.jpa.show-sql", "false");
         properties.put("spring.main.banner-mode", "off");
         properties.put("spring.main.web-application-type", "none");
@@ -1037,7 +1036,7 @@ class DeliveryRecoveryIntegrationTest {
         List<String> command = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
                 "-cp", System.getProperty("java.class.path"), TextloopApplication.class.getName(),
                 "--spring.datasource.url=" + postgres.getJdbcUrl(), "--spring.datasource.username=" + postgres.getUsername(),
-                "--spring.datasource.password=" + postgres.getPassword(), "--spring.jpa.hibernate.ddl-auto=update",
+                "--spring.datasource.password=" + postgres.getPassword(),
                 "--spring.jpa.show-sql=false", "--spring.main.banner-mode=off", "--textloop.recovery=true"));
         command.addAll(List.of(options));
         Process process = new ProcessBuilder(command).redirectErrorStream(true).start();

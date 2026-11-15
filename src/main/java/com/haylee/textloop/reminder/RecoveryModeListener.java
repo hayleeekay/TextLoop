@@ -35,6 +35,7 @@ public class RecoveryModeListener implements ApplicationListener<ApplicationEnvi
         } else if (recoveryMode) {
             event.getEnvironment().getPropertySources().addFirst(new MapPropertySource("recovery-mode", Map.of(
                     "spring.main.web-application-type", "none",
+                    "spring.flyway.enabled", "false",
                     "spring.main.log-startup-info", "false",
                     // These components can log original exception text before Boot's failure reporter runs.
                     "logging.level.org.springframework", "OFF",
