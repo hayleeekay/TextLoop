@@ -457,8 +457,9 @@ class DeliveryRecoveryIntegrationTest {
         try (var connection = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
                 var statement = connection.createStatement()) {
             statement.execute("alter table reminders drop column version, drop column withdrawn_at");
+            statement.execute("drop table flyway_schema_history");
         }
-        boot();
+        boot("spring.flyway.baseline-on-migrate=true");
         assertThat(jdbc().queryForList("select * from deliveries order by id")).isEqualTo(beforeDeliveries);
         var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
         assertThat(reminder.getVersion()).isZero();
@@ -897,7 +898,7 @@ class DeliveryRecoveryIntegrationTest {
             statement.execute("insert into reminders (message, phone_number, scheduled_at, status, created_at, updated_at) "
                     + "values ('legacy future', '+12035550101', '2100-01-01', 'PENDING', '2000-01-01', '2000-01-01')");
         }
-        boot();
+        boot("spring.flyway.baseline-on-migrate=true");
         assertThat(reminderRows().count()).isEqualTo(3);
         assertThat(deliveryRows().count()).isEqualTo(2);
         var states = transactions().inspect();
