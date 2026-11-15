@@ -82,13 +82,15 @@ connection settings point to your existing TextLoop database. On the first start
 with Flyway, run:
 
 ```sh
-SERVER_ADDRESS=127.0.0.1 SPRING_FLYWAY_BASELINE_ON_MIGRATE=true mise exec -- ./mvnw spring-boot:run
+SERVER_ADDRESS=127.0.0.1 SPRING_FLYWAY_BASELINE_ON_MIGRATE=true \
+  TEXTLOOP_SCHEDULING_ENABLED=false mise exec -- ./mvnw spring-boot:run
 ```
 
 Use this option only for a known TextLoop database with no Flyway history. It
 marks the existing schema as version 0 and applies V1 without deleting reminders.
-After a successful startup, use the normal start command. Start the app this way
-before running delivery recovery on a database from an older version.
+Scheduling stays off during the upgrade so due reminders do not send. Once the
+app starts successfully, stop it again. Use the normal start command to resume
+scheduling, or run delivery recovery first if you need to inspect the queue.
 
 For a new schema change, add the next numbered SQL file under
 `src/main/resources/db/migration`. Keep previously applied migrations intact.
