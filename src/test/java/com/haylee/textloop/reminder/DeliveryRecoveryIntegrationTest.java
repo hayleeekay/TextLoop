@@ -111,7 +111,6 @@ class DeliveryRecoveryIntegrationTest {
         properties.put("spring.datasource.url", postgres.getJdbcUrl());
         properties.put("spring.datasource.username", postgres.getUsername());
         properties.put("spring.datasource.password", postgres.getPassword());
-        properties.put("spring.jpa.hibernate.ddl-auto", "update");
         properties.put("spring.jpa.show-sql", "false");
         properties.put("spring.main.banner-mode", "off");
         properties.put("spring.main.web-application-type", "none");
@@ -458,8 +457,9 @@ class DeliveryRecoveryIntegrationTest {
         try (var connection = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
                 var statement = connection.createStatement()) {
             statement.execute("alter table reminders drop column version, drop column withdrawn_at");
+            statement.execute("drop table flyway_schema_history");
         }
-        boot();
+        boot("spring.flyway.baseline-on-migrate=true");
         assertThat(jdbc().queryForList("select * from deliveries order by id")).isEqualTo(beforeDeliveries);
         var reminder = reminderRows().findById(delivery.getReminder().getId()).orElseThrow();
         assertThat(reminder.getVersion()).isZero();
@@ -898,7 +898,7 @@ class DeliveryRecoveryIntegrationTest {
             statement.execute("insert into reminders (message, phone_number, scheduled_at, status, created_at, updated_at) "
                     + "values ('legacy future', '+12035550101', '2100-01-01', 'PENDING', '2000-01-01', '2000-01-01')");
         }
-        boot();
+        boot("spring.flyway.baseline-on-migrate=true");
         assertThat(reminderRows().count()).isEqualTo(3);
         assertThat(deliveryRows().count()).isEqualTo(2);
         var states = transactions().inspect();
@@ -1037,7 +1037,7 @@ class DeliveryRecoveryIntegrationTest {
         List<String> command = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
                 "-cp", System.getProperty("java.class.path"), TextloopApplication.class.getName(),
                 "--spring.datasource.url=" + postgres.getJdbcUrl(), "--spring.datasource.username=" + postgres.getUsername(),
-                "--spring.datasource.password=" + postgres.getPassword(), "--spring.jpa.hibernate.ddl-auto=update",
+                "--spring.datasource.password=" + postgres.getPassword(),
                 "--spring.jpa.show-sql=false", "--spring.main.banner-mode=off", "--textloop.recovery=true"));
         command.addAll(List.of(options));
         Process process = new ProcessBuilder(command).redirectErrorStream(true).start();

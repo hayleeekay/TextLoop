@@ -71,8 +71,29 @@ SERVER_ADDRESS=127.0.0.1 mise exec -- ./mvnw spring-boot:run
 ```
 
 Once startup finishes, open [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
-Spring creates the development tables on startup. The address keeps the app local
-to this computer; it currently has no authentication.
+Flyway applies any pending database migrations at startup, then Hibernate
+validates the schema. The address keeps the app local to this computer. The local
+app currently has no authentication.
+
+### Upgrade a local database created by an older version
+
+Stop TextLoop and back up the database before upgrading. Check that your database
+connection settings point to your existing TextLoop database. On the first start
+with Flyway, run:
+
+```sh
+SERVER_ADDRESS=127.0.0.1 SPRING_FLYWAY_BASELINE_ON_MIGRATE=true \
+  TEXTLOOP_SCHEDULING_ENABLED=false mise exec -- ./mvnw spring-boot:run
+```
+
+Use this option only for a known TextLoop database with no Flyway history. It
+marks the existing schema as version 0 and applies V1 without deleting reminders.
+Scheduling stays off during the upgrade so due reminders do not send. Once the
+app starts successfully, stop it again. Use the normal start command to resume
+scheduling, or run delivery recovery first if you need to inspect the queue.
+
+For a new schema change, add the next numbered SQL file under
+`src/main/resources/db/migration`. Keep previously applied migrations intact.
 
 ## Try a reminder
 

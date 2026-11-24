@@ -25,7 +25,7 @@ import com.haylee.textloop.reminder.dto.ReminderResponse;
 
 @AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT,
-        properties = "spring.jpa.hibernate.ddl-auto=update")
+        properties = "spring.flyway.baseline-on-migrate=true")
 @Import(ReminderSchemaUpgradeIntegrationTest.LegacyDatabaseConfiguration.class)
 @DirtiesContext
 class ReminderSchemaUpgradeIntegrationTest {
@@ -39,7 +39,10 @@ class ReminderSchemaUpgradeIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void widensExistingMessageColumnWithoutChangingSavedReminder() {
+    void migratesLegacySchemaWithoutChangingSavedReminder() {
+        assertThat(jdbcTemplate.queryForList(
+                "select version from flyway_schema_history order by installed_rank", String.class))
+                .containsExactly("0", "1");
         assertThat(columnLength("message")).isEqualTo(1000);
         assertThat(columnLength("phone_number")).isEqualTo(255);
         assertThat(reminderRepository.count()).isEqualTo(1);
